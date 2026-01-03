@@ -64,12 +64,17 @@ export default function PagosPage() {
       inicioMes.setDate(1);
       const inicioMesStr = inicioMes.toISOString().split('T')[0];
 
-      // Precios de planes como fallback
-      const PLAN_PRICES: Record<string, number> = {
-        mensual: 120,
-        trimestral: 300,
-        anual: 1000,
-      };
+      // Cargar precios desde configuración
+      const { data: configData } = await supabase
+        .from('configuracion')
+        .select('*');
+
+      const PLAN_PRICES: Record<string, number> = {};
+      if (configData) {
+        configData.forEach(config => {
+          PLAN_PRICES[config.plan] = config.precio;
+        });
+      }
 
       // Total del Mes (clientes registrados este mes)
       const { data: clientesMes } = await supabase

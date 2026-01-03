@@ -42,12 +42,17 @@ export default function Dashboard() {
       inicioMes.setDate(1);
       const inicioMesStr = inicioMes.toISOString().split('T')[0];
 
-      // Precios de planes como fallback
-      const planPrices: Record<string, number> = {
-        mensual: 120,
-        trimestral: 300,
-        anual: 1000,
-      };
+      // Cargar precios desde configuración
+      const { data: configData } = await supabase
+        .from('configuracion')
+        .select('*');
+
+      const planPrices: Record<string, number> = {};
+      if (configData) {
+        configData.forEach(config => {
+          planPrices[config.plan] = config.precio;
+        });
+      }
 
       // Total Socios
       const { count: totalCount } = await supabase

@@ -501,6 +501,7 @@ export default function ClientesPage() {
             fechaNacimiento: selectedCliente.fechaNacimiento || '',
             plan: selectedCliente.plan,
             fechaInicio: selectedCliente.fechaInicio || '',
+            montoPagado: 0,
             foto: null,
           }}
         />
