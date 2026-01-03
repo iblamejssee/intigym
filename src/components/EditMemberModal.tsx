@@ -20,6 +20,7 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
     fechaNacimiento: '',
     plan: '',
     fechaInicio: '',
+    montoPagado: 0,
     foto: null,
   });
   const [preview, setPreview] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
         fechaNacimiento: memberData.fechaNacimiento || '',
         plan: memberData.plan || '',
         fechaInicio: memberData.fechaInicio || '',
+        montoPagado: memberData.montoPagado || 0,
         foto: null,
       });
       // Si hay una foto existente, mostrar preview (en producción vendría de la URL)
