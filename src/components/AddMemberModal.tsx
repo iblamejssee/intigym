@@ -61,12 +61,23 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
 
       if (error) {
         console.error('Error al cargar planes:', error);
-        toast.error('Error al cargar planes de configuración');
+        // Usar planes por defecto si hay error
+        setPlanes([
+          { nombre: 'mensual', precio: 60 },
+          { nombre: 'trimestral', precio: 150 },
+          { nombre: 'anual', precio: 500 },
+        ]);
         return;
       }
 
       if (!data || data.length === 0) {
-        toast.warning('No hay planes configurados. Por favor, configura los planes primero.');
+        console.warn('No hay planes configurados, usando valores por defecto');
+        // Usar planes por defecto si no hay datos
+        setPlanes([
+          { nombre: 'mensual', precio: 60 },
+          { nombre: 'trimestral', precio: 150 },
+          { nombre: 'anual', precio: 500 },
+        ]);
         return;
       }
 
@@ -77,7 +88,12 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
       setPlanes(planesData);
     } catch (error) {
       console.error('Error al cargar planes:', error);
-      toast.error('Error al cargar planes');
+      // Usar planes por defecto en caso de error
+      setPlanes([
+        { nombre: 'mensual', precio: 60 },
+        { nombre: 'trimestral', precio: 150 },
+        { nombre: 'anual', precio: 500 },
+      ]);
     }
   };
 
