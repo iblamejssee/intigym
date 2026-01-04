@@ -158,6 +158,8 @@ export default function ClientesPage() {
             fecha_vencimiento: fechaVencimiento || null,
             estado_pago: 'al-dia',
             foto_url: fotoUrl,
+            monto_pagado: data.montoPagado || 0,
+            metodo_pago: data.metodoPago || 'efectivo',
           },
         ])
         .select()

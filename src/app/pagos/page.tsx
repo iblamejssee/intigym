@@ -215,22 +215,45 @@ export default function PagosPage() {
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto Pagado</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Deuda</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#AB8745]/10">
                     {paymentHistory.map((pago) => {
-                      const monto = (pago.monto_pagado && pago.monto_pagado > 0)
-                        ? pago.monto_pagado
-                        : (planPrices[pago.plan] || 0);
+                      const precioPlan = planPrices[pago.plan] || 0;
+                      const montoPagado = (pago.monto_pagado && pago.monto_pagado > 0) ? pago.monto_pagado : 0;
+                      const deuda = precioPlan - montoPagado;
+                      const tieneDeuda = deuda > 0;
 
                       const hoy = new Date();
                       hoy.setHours(0, 0, 0, 0);
                       const vencimiento = new Date(pago.fecha_vencimiento);
                       vencimiento.setHours(0, 0, 0, 0);
                       const estaVencido = vencimiento < hoy;
+
+                      const handleCompletarPago = async () => {
+                        try {
+                          const { error } = await supabase
+                            .from('clientes')
+                            .update({ monto_pagado: precioPlan })
+                            .eq('id', pago.id);
+
+                          if (error) {
+                            toast.error('Error al completar el pago');
+                            return;
+                          }
+
+                          toast.success('Pago completado exitosamente');
+                          loadPaymentStats();
+                        } catch (error) {
+                          console.error('Error:', error);
+                          toast.error('Error al completar el pago');
+                        }
+                      };
 
                       return (
                         <tr key={pago.id} className="hover:bg-white/5 transition-colors">
@@ -246,7 +269,15 @@ export default function PagosPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-green-400 font-semibold">S/ {monto.toFixed(2)}</div>
+                            <div className="text-sm text-green-400 font-semibold">S/ {montoPagado.toFixed(2)}</div>
+                            <div className="text-xs text-gray-500">de S/ {precioPlan.toFixed(2)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {tieneDeuda ? (
+                              <div className="text-sm text-yellow-400 font-semibold">S/ {deuda.toFixed(2)}</div>
+                            ) : (
+                              <div className="text-sm text-green-400">✓ Completo</div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-300">
@@ -266,6 +297,18 @@ export default function PagosPage() {
                             >
                               {estaVencido ? 'Vencido' : 'Activo'}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {tieneDeuda ? (
+                              <button
+                                onClick={handleCompletarPago}
+                                className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
+                              >
+                                Completar Pago
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-500">-</span>
+                            )}
                           </td>
                         </tr>
                       );
