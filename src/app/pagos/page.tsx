@@ -31,6 +31,9 @@ export default function PagosPage() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [planPrices, setPlanPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<{ id: number, precio: number } | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState('efectivo');
 
   useEffect(() => {
     loadPaymentStats();
@@ -239,8 +242,11 @@ export default function PagosPage() {
                         try {
                           const { error } = await supabase
                             .from('clientes')
-                            .update({ monto_pagado: precioPlan })
-                            .eq('id', pago.id);
+                            .update({
+                              monto_pagado: precioPlan,
+                              metodo_pago: selectedMethod
+                            })
+                            .eq('id', selectedPayment!.id);
 
                           if (error) {
                             toast.error('Error al completar el pago');
@@ -248,6 +254,8 @@ export default function PagosPage() {
                           }
 
                           toast.success('Pago completado exitosamente');
+                          setShowPaymentMethodModal(false);
+                          setSelectedPayment(null);
                           loadPaymentStats();
                         } catch (error) {
                           console.error('Error:', error);
@@ -301,7 +309,10 @@ export default function PagosPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             {tieneDeuda ? (
                               <button
-                                onClick={handleCompletarPago}
+                                onClick={() => {
+                                  setSelectedPayment({ id: pago.id, precio: precioPlan });
+                                  setShowPaymentMethodModal(true);
+                                }}
                                 className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
                               >
                                 Completar Pago
@@ -320,6 +331,103 @@ export default function PagosPage() {
           </div>
         </div>
       </main>
+
+      {/* Payment Method Modal */}
+      {showPaymentMethodModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a1a] border border-[#AB8745]/30 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-white mb-6">Seleccionar Método de Pago</h3>
+
+            <div className="space-y-4 mb-6">
+              <button
+                onClick={() => setSelectedMethod('efectivo')}
+                className={`w-full p-4 rounded-xl border-2 transition-all ${selectedMethod === 'efectivo'
+                    ? 'border-green-500 bg-green-500/10'
+                    : 'border-gray-700 hover:border-green-500/50'
+                  }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">💵</span>
+                  <div className="text-left">
+                    <p className="text-white font-semibold">Efectivo</p>
+                    <p className="text-sm text-gray-400">Pago en efectivo</p>
+                  </div>
+                  {selectedMethod === 'efectivo' && (
+                    <div className="ml-auto w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm">✓</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+
+              <button
+                onClick={() => setSelectedMethod('yape')}
+                className={`w-full p-4 rounded-xl border-2 transition-all ${selectedMethod === 'yape'
+                    ? 'border-purple-500 bg-purple-500/10'
+                    : 'border-gray-700 hover:border-purple-500/50'
+                  }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">📱</span>
+                  <div className="text-left">
+                    <p className="text-white font-semibold">Yape</p>
+                    <p className="text-sm text-gray-400">Pago digital</p>
+                  </div>
+                  {selectedMethod === 'yape' && (
+                    <div className="ml-auto w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm">✓</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPaymentMethodModal(false);
+                  setSelectedPayment(null);
+                }}
+                className="flex-1 px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const handleCompletarPago = async () => {
+                    try {
+                      const { error } = await supabase
+                        .from('clientes')
+                        .update({
+                          monto_pagado: selectedPayment.precio,
+                          metodo_pago: selectedMethod
+                        })
+                        .eq('id', selectedPayment.id);
+
+                      if (error) {
+                        toast.error('Error al completar el pago');
+                        return;
+                      }
+
+                      toast.success('Pago completado exitosamente');
+                      setShowPaymentMethodModal(false);
+                      setSelectedPayment(null);
+                      loadPaymentStats();
+                    } catch (error) {
+                      console.error('Error:', error);
+                      toast.error('Error al completar el pago');
+                    }
+                  };
+                  handleCompletarPago();
+                }}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-lg font-semibold transition-all"
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

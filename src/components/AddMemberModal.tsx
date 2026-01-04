@@ -404,7 +404,6 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                 >
                   <option value="efectivo" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>💵 Efectivo</option>
                   <option value="yape" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>📱 Yape</option>
-                  <option value="transferencia" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>🏦 Transferencia</option>
                 </select>
               </div>
 
