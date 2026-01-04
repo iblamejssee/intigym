@@ -25,6 +25,7 @@ interface Cliente {
   estado: 'al-dia' | 'vencido';
   foto?: string;
   qrCode?: string;
+  metodo_pago?: string;
 }
 
 // Función para convertir ClienteDB a Cliente
