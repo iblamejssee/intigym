@@ -31,12 +31,14 @@ export interface ClienteDB {
 export async function cargarPreciosPlanes(): Promise<Record<string, number>> {
   const { data: configData } = await supabase
     .from('configuracion')
-    .select('plan, precio');
+    .select('clave, valor')
+    .like('clave', 'precio_%');
 
   const precios: Record<string, number> = {};
   if (configData) {
     configData.forEach(config => {
-      precios[config.plan] = config.precio;
+      const planName = config.clave.replace('precio_', '');
+      precios[planName] = parseFloat(config.valor);
     });
   }
 

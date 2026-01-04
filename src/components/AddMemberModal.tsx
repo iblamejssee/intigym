@@ -56,44 +56,29 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
     try {
       const { data, error } = await supabase
         .from('configuracion')
-        .select('plan, precio')
-        .order('precio');
+        .select('clave, valor')
+        .like('clave', 'precio_%')
+        .order('valor');
 
       if (error) {
         console.error('Error al cargar planes:', error);
-        // Usar planes por defecto si hay error
-        setPlanes([
-          { nombre: 'mensual', precio: 60 },
-          { nombre: 'trimestral', precio: 150 },
-          { nombre: 'anual', precio: 500 },
-        ]);
+        toast.error('Error al cargar planes de configuración');
         return;
       }
 
       if (!data || data.length === 0) {
-        console.warn('No hay planes configurados, usando valores por defecto');
-        // Usar planes por defecto si no hay datos
-        setPlanes([
-          { nombre: 'mensual', precio: 60 },
-          { nombre: 'trimestral', precio: 150 },
-          { nombre: 'anual', precio: 500 },
-        ]);
+        toast.warning('No hay planes configurados. Por favor, configura los planes primero.');
         return;
       }
 
       const planesData = data.map(item => ({
-        nombre: item.plan,
-        precio: item.precio,
+        nombre: item.clave.replace('precio_', ''),
+        precio: parseFloat(item.valor),
       }));
       setPlanes(planesData);
     } catch (error) {
       console.error('Error al cargar planes:', error);
-      // Usar planes por defecto en caso de error
-      setPlanes([
-        { nombre: 'mensual', precio: 60 },
-        { nombre: 'trimestral', precio: 150 },
-        { nombre: 'anual', precio: 500 },
-      ]);
+      toast.error('Error al cargar planes');
     }
   };
 
