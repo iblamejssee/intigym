@@ -3,6 +3,13 @@
 import { useState, useEffect } from 'react';
 import { X, User, Calendar, DollarSign, Image as ImageIcon, Upload } from 'lucide-react';
 import { MemberFormData } from './AddMemberModal';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+
+interface PlanOption {
+  nombre: string;
+  precio: number;
+}
 
 interface EditMemberModalProps {
   isOpen: boolean;
@@ -24,24 +31,58 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
     foto: null,
   });
   const [preview, setPreview] = useState<string | null>(null);
+  const [planes, setPlanes] = useState<PlanOption[]>([]);
 
   useEffect(() => {
-    if (isOpen && memberData) {
-      setFormData({
-        nombre: memberData.nombre || '',
-        dni: memberData.dni || '',
-        telefono: memberData.telefono || '',
-        email: memberData.email || '',
-        fechaNacimiento: memberData.fechaNacimiento || '',
-        plan: memberData.plan || '',
-        fechaInicio: memberData.fechaInicio || '',
-        montoPagado: memberData.montoPagado || 0,
-        foto: null,
-      });
-      // Si hay una foto existente, mostrar preview (en producción vendría de la URL)
-      setPreview(null);
+    if (isOpen) {
+      loadPlanes();
+      if (memberData) {
+        setFormData({
+          nombre: memberData.nombre || '',
+          dni: memberData.dni || '',
+          telefono: memberData.telefono || '',
+          email: memberData.email || '',
+          fechaNacimiento: memberData.fechaNacimiento || '',
+          plan: memberData.plan || '',
+          fechaInicio: memberData.fechaInicio || '',
+          montoPagado: memberData.montoPagado || 0,
+          foto: null,
+        });
+        // Si hay una foto existente, mostrar preview (en producción vendría de la URL)
+        setPreview(null);
+      }
     }
   }, [isOpen, memberData]);
+
+  const loadPlanes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('configuracion')
+        .select('clave, valor')
+        .like('clave', 'precio_%')
+        .order('valor');
+
+      if (error) {
+        console.error('Error al cargar planes:', error);
+        toast.error('Error al cargar planes de configuración');
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        toast.warning('No hay planes configurados');
+        return;
+      }
+
+      const planesData = data.map(item => ({
+        nombre: item.clave.replace('precio_', ''),
+        precio: parseFloat(item.valor),
+      }));
+      setPlanes(planesData);
+    } catch (error) {
+      console.error('Error al cargar planes:', error);
+      toast.error('Error al cargar planes');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -195,9 +236,11 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
                   className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
                 >
                   <option value="">Selecciona un plan</option>
-                  <option value="mensual">Mensual - S/ 120</option>
-                  <option value="trimestral">Trimestral - S/ 300</option>
-                  <option value="anual">Anual - S/ 1,000</option>
+                  {planes.map((plan) => (
+                    <option key={plan.nombre} value={plan.nombre}>
+                      {plan.nombre.charAt(0).toUpperCase() + plan.nombre.slice(1).replace('_', ' ')} - S/ {plan.precio}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
