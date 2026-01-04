@@ -31,6 +31,8 @@ export default function PagosPage() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [planPrices, setPlanPrices] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPaymentData, setSelectedPaymentData] = useState<{ id: number, deuda: number, nombre: string } | null>(null);
 
   useEffect(() => {
     loadPaymentStats();
@@ -235,8 +237,27 @@ export default function PagosPage() {
                       vencimiento.setHours(0, 0, 0, 0);
                       const estaVencido = vencimiento < hoy;
 
-                      const handleCompletarPago = async () => {
+                      const handleCompletarPago = async (metodoPago: string) => {
                         try {
+                          const montoRestante = deuda;
+
+                          // Registrar el pago en historial_pagos
+                          const { error: pagoError } = await supabase
+                            .from('historial_pagos')
+                            .insert([{
+                              cliente_id: pago.id,
+                              monto: montoRestante,
+                              metodo_pago: metodoPago,
+                              concepto: 'Pago complementario de membresía'
+                            }]);
+
+                          if (pagoError) {
+                            toast.error('Error al registrar el pago');
+                            console.error(pagoError);
+                            return;
+                          }
+
+                          // Actualizar monto_pagado en clientes
                           const { error } = await supabase
                             .from('clientes')
                             .update({ monto_pagado: precioPlan })
@@ -301,7 +322,10 @@ export default function PagosPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             {tieneDeuda ? (
                               <button
-                                onClick={handleCompletarPago}
+                                onClick={() => {
+                                  setSelectedPaymentData({ id: pago.id, deuda, nombre: pago.nombre });
+                                  setShowPaymentModal(true);
+                                }}
                                 className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
                               >
                                 Completar Pago
@@ -320,6 +344,151 @@ export default function PagosPage() {
           </div>
         </div>
       </main>
+
+      {/* Payment Method Modal */}
+      {showPaymentModal && selectedPaymentData && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a1a] border border-[#AB8745]/30 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-white mb-2">Completar Pago</h3>
+            <p className="text-gray-400 mb-6">
+              {selectedPaymentData.nombre} - Deuda: <span className="text-yellow-400 font-bold">S/ {selectedPaymentData.deuda.toFixed(2)}</span>
+            </p>
+
+            <p className="text-sm text-gray-300 mb-4">Selecciona el método de pago:</p>
+
+            <div className="space-y-3 mb-6">
+              <button
+                onClick={async () => {
+                  const handleCompletarPago = async (metodoPago: string) => {
+                    try {
+                      const { error: pagoError } = await supabase
+                        .from('historial_pagos')
+                        .insert([{
+                          cliente_id: selectedPaymentData.id,
+                          monto: selectedPaymentData.deuda,
+                          metodo_pago: metodoPago,
+                          concepto: 'Pago complementario de membresía'
+                        }]);
+
+                      if (pagoError) {
+                        toast.error('Error al registrar el pago');
+                        console.error(pagoError);
+                        return;
+                      }
+
+                      // Calcular nuevo monto_pagado
+                      const { data: cliente } = await supabase
+                        .from('clientes')
+                        .select('monto_pagado')
+                        .eq('id', selectedPaymentData.id)
+                        .single();
+
+                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
+
+                      const { error } = await supabase
+                        .from('clientes')
+                        .update({ monto_pagado: nuevoMonto })
+                        .eq('id', selectedPaymentData.id);
+
+                      if (error) {
+                        toast.error('Error al completar el pago');
+                        return;
+                      }
+
+                      toast.success('Pago completado exitosamente');
+                      setShowPaymentModal(false);
+                      setSelectedPaymentData(null);
+                      loadPaymentStats();
+                    } catch (error) {
+                      console.error('Error:', error);
+                      toast.error('Error al completar el pago');
+                    }
+                  };
+                  await handleCompletarPago('efectivo');
+                }}
+                className="w-full p-4 rounded-xl border-2 border-green-500 bg-green-500/10 hover:bg-green-500/20 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">💵</span>
+                  <div className="text-left">
+                    <p className="text-white font-semibold">Efectivo</p>
+                    <p className="text-sm text-gray-400">Pago en efectivo</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={async () => {
+                  const handleCompletarPago = async (metodoPago: string) => {
+                    try {
+                      const { error: pagoError } = await supabase
+                        .from('historial_pagos')
+                        .insert([{
+                          cliente_id: selectedPaymentData.id,
+                          monto: selectedPaymentData.deuda,
+                          metodo_pago: metodoPago,
+                          concepto: 'Pago complementario de membresía'
+                        }]);
+
+                      if (pagoError) {
+                        toast.error('Error al registrar el pago');
+                        console.error(pagoError);
+                        return;
+                      }
+
+                      const { data: cliente } = await supabase
+                        .from('clientes')
+                        .select('monto_pagado')
+                        .eq('id', selectedPaymentData.id)
+                        .single();
+
+                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
+
+                      const { error } = await supabase
+                        .from('clientes')
+                        .update({ monto_pagado: nuevoMonto })
+                        .eq('id', selectedPaymentData.id);
+
+                      if (error) {
+                        toast.error('Error al completar el pago');
+                        return;
+                      }
+
+                      toast.success('Pago completado exitosamente');
+                      setShowPaymentModal(false);
+                      setSelectedPaymentData(null);
+                      loadPaymentStats();
+                    } catch (error) {
+                      console.error('Error:', error);
+                      toast.error('Error al completar el pago');
+                    }
+                  };
+                  await handleCompletarPago('yape');
+                }}
+                className="w-full p-4 rounded-xl border-2 border-purple-500 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">📱</span>
+                  <div className="text-left">
+                    <p className="text-white font-semibold">Yape</p>
+                    <p className="text-sm text-gray-400">Pago digital</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowPaymentModal(false);
+                setSelectedPaymentData(null);
+              }}
+              className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

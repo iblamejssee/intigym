@@ -172,6 +172,23 @@ export default function ClientesPage() {
       }
 
       if (newCliente) {
+        // Registrar el pago inicial en historial_pagos si hay monto pagado
+        if (data.montoPagado && data.montoPagado > 0) {
+          const { error: pagoError } = await supabase
+            .from('historial_pagos')
+            .insert([{
+              cliente_id: newCliente.id,
+              monto: data.montoPagado,
+              metodo_pago: data.metodoPago || 'efectivo',
+              concepto: 'Pago inicial de membresía'
+            }]);
+
+          if (pagoError) {
+            console.error('Error al registrar pago:', pagoError);
+            // No bloqueamos la creación del cliente por error en historial
+          }
+        }
+
         // Recargar la lista completa desde Supabase para asegurar consistencia
         await loadClientes();
         setIsAddModalOpen(false);
