@@ -23,6 +23,7 @@ export interface ClienteDB {
   estado_pago: 'al-dia' | 'vencido';
   foto_url?: string;
   monto_pagado?: number;
+  metodo_pago?: string;
   created_at?: string;
   updated_at?: string;
 }

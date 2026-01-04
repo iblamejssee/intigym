@@ -389,7 +389,7 @@ export default function ClientesPage() {
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">DNI</th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</th>
-                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado de Pago</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Membresia</th>
                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Acciones</th>
                       </tr>
                     </thead>

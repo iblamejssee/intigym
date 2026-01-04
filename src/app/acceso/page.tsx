@@ -161,8 +161,8 @@ export default function AccesoPage() {
                                         setDniSearch('');
                                     }}
                                     className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${activeTab === 'qr'
-                                            ? 'bg-[#AB8745] text-white'
-                                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                        ? 'bg-[#AB8745] text-white'
+                                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
                                         }`}
                                 >
                                     <Camera className="w-5 h-5" />
@@ -178,8 +178,8 @@ export default function AccesoPage() {
                                         }
                                     }}
                                     className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${activeTab === 'manual'
-                                            ? 'bg-[#AB8745] text-white'
-                                            : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                        ? 'bg-[#AB8745] text-white'
+                                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
                                         }`}
                                 >
                                     <Keyboard className="w-5 h-5" />
@@ -235,8 +235,8 @@ export default function AccesoPage() {
                             {/* Result Display */}
                             {searchResult && (
                                 <div className={`p-8 rounded-xl border-4 ${searchResult.vencido
-                                        ? 'bg-red-600/20 border-red-600/50'
-                                        : 'bg-green-600/20 border-green-600/50'
+                                    ? 'bg-red-600/20 border-red-600/50'
+                                    : 'bg-green-600/20 border-green-600/50'
                                     } animate-in fade-in zoom-in duration-300`}>
                                     <div className="flex flex-col items-center text-center">
                                         <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 ${searchResult.vencido ? 'bg-red-600/30' : 'bg-green-600/30'
