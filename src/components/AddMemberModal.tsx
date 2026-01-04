@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Upload, User, Calendar, DollarSign, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -55,33 +56,28 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
     try {
       const { data, error } = await supabase
         .from('configuracion')
-        .select('*')
-        .like('clave', 'precio_%')
-        .order('clave');
+        .select('plan, precio')
+        .order('precio');
 
-      if (error || !data || data.length === 0) {
-        // Valores por defecto si no hay datos
-        setPlanes([
-          { nombre: 'mensual', precio: 120 },
-          { nombre: 'trimestral', precio: 300 },
-          { nombre: 'anual', precio: 1000 },
-        ]);
+      if (error) {
+        console.error('Error al cargar planes:', error);
+        toast.error('Error al cargar planes de configuración');
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        toast.warning('No hay planes configurados. Por favor, configura los planes primero.');
         return;
       }
 
       const planesData = data.map(item => ({
-        nombre: item.clave.replace('precio_', ''),
-        precio: parseFloat(item.valor),
+        nombre: item.plan,
+        precio: item.precio,
       }));
       setPlanes(planesData);
     } catch (error) {
       console.error('Error al cargar planes:', error);
-      // Valores por defecto en caso de error
-      setPlanes([
-        { nombre: 'mensual', precio: 120 },
-        { nombre: 'trimestral', precio: 300 },
-        { nombre: 'anual', precio: 1000 },
-      ]);
+      toast.error('Error al cargar planes');
     }
   };
 

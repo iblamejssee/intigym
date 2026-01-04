@@ -27,12 +27,21 @@ export interface ClienteDB {
   updated_at?: string;
 }
 
-// Precios de planes
-export const PLAN_PRICES: Record<string, number> = {
-  mensual: 80,
-  trimestral: 200,
-  anual: 700,
-};
+// Función para cargar precios de planes desde la configuración
+export async function cargarPreciosPlanes(): Promise<Record<string, number>> {
+  const { data: configData } = await supabase
+    .from('configuracion')
+    .select('plan, precio');
+
+  const precios: Record<string, number> = {};
+  if (configData) {
+    configData.forEach(config => {
+      precios[config.plan] = config.precio;
+    });
+  }
+
+  return precios;
+}
 
 // Función para calcular fecha de vencimiento basada en plan y fecha_inicio
 export function calcularFechaVencimiento(plan: string, fechaInicio: string): string {

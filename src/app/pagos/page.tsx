@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import { CreditCard, DollarSign, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, cargarPreciosPlanes } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface PaymentStats {
@@ -28,8 +28,9 @@ export default function PagosPage() {
     pendientes: 0,
     vencidos: 0,
   });
-  const [loading, setLoading] = useState(true);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [planPrices, setPlanPrices] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadPaymentStats();
@@ -65,16 +66,8 @@ export default function PagosPage() {
       const inicioMesStr = inicioMes.toISOString().split('T')[0];
 
       // Cargar precios desde configuración
-      const { data: configData } = await supabase
-        .from('configuracion')
-        .select('*');
-
-      const PLAN_PRICES: Record<string, number> = {};
-      if (configData) {
-        configData.forEach(config => {
-          PLAN_PRICES[config.plan] = config.precio;
-        });
-      }
+      const preciosPlanes = await cargarPreciosPlanes();
+      setPlanPrices(preciosPlanes);
 
       // Total del Mes (clientes registrados este mes)
       const { data: clientesMes } = await supabase
@@ -88,7 +81,7 @@ export default function PagosPage() {
           // Usar monto_pagado si existe y es mayor a 0, sino usar precio del plan
           const monto = (cliente.monto_pagado && cliente.monto_pagado > 0)
             ? cliente.monto_pagado
-            : (PLAN_PRICES[cliente.plan] || 0);
+            : (preciosPlanes[cliente.plan] || 0);
           return sum + monto;
         }, 0);
       }
@@ -229,15 +222,9 @@ export default function PagosPage() {
                   </thead>
                   <tbody className="divide-y divide-[#AB8745]/10">
                     {paymentHistory.map((pago) => {
-                      const PLAN_PRICES: Record<string, number> = {
-                        mensual: 120,
-                        trimestral: 300,
-                        anual: 1000,
-                      };
-
                       const monto = (pago.monto_pagado && pago.monto_pagado > 0)
                         ? pago.monto_pagado
-                        : (PLAN_PRICES[pago.plan] || 0);
+                        : (planPrices[pago.plan] || 0);
 
                       const hoy = new Date();
                       hoy.setHours(0, 0, 0, 0);

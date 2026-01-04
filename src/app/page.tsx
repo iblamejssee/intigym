@@ -6,7 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import AddMemberModal, { MemberFormData } from '@/components/AddMemberModal';
 import MemberSuccessModal from '@/components/MemberSuccessModal';
 import { Users, CreditCard, DollarSign, Plus, Loader2, QrCode, Search, CheckCircle, XCircle } from 'lucide-react';
-import { supabase, PLAN_PRICES, calcularFechaVencimiento } from '@/lib/supabase';
+import { supabase, cargarPreciosPlanes, calcularFechaVencimiento } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface DashboardStats {
@@ -43,16 +43,7 @@ export default function Dashboard() {
       const inicioMesStr = inicioMes.toISOString().split('T')[0];
 
       // Cargar precios desde configuración
-      const { data: configData } = await supabase
-        .from('configuracion')
-        .select('*');
-
-      const planPrices: Record<string, number> = {};
-      if (configData) {
-        configData.forEach(config => {
-          planPrices[config.plan] = config.precio;
-        });
-      }
+      const planPrices = await cargarPreciosPlanes();
 
       // Total Socios
       const { count: totalCount } = await supabase
