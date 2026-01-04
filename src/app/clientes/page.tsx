@@ -502,6 +502,7 @@ export default function ClientesPage() {
             plan: selectedCliente.plan,
             fechaInicio: selectedCliente.fechaInicio || '',
             montoPagado: 0,
+            metodoPago: selectedCliente.metodo_pago || 'efectivo',
             foto: null,
           }}
         />
