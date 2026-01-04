@@ -13,6 +13,11 @@ interface DashboardStats {
   totalSocios: number;
   pagosPendientes: number;
   ingresosMes: number;
+  ingresosPorMetodo: {
+    efectivo: number;
+    yape: number;
+    transferencia: number;
+  };
 }
 
 export default function Dashboard() {
@@ -26,6 +31,11 @@ export default function Dashboard() {
     totalSocios: 0,
     pagosPendientes: 0,
     ingresosMes: 0,
+    ingresosPorMetodo: {
+      efectivo: 0,
+      yape: 0,
+      transferencia: 0,
+    },
   });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -59,24 +69,38 @@ export default function Dashboard() {
       // Ingresos del Mes (clientes registrados este mes)
       const { data: clientesMes } = await supabase
         .from('clientes')
-        .select('plan, monto_pagado')
+        .select('plan, monto_pagado, metodo_pago')
         .gte('created_at', inicioMesStr);
 
       let ingresos = 0;
+      const ingresosPorMetodo = {
+        efectivo: 0,
+        yape: 0,
+        transferencia: 0,
+      };
+
       if (clientesMes) {
-        ingresos = clientesMes.reduce((sum, cliente) => {
+        clientesMes.forEach(cliente => {
           // Usar monto_pagado si existe y es mayor a 0, sino usar precio del plan
           const monto = (cliente.monto_pagado && cliente.monto_pagado > 0)
             ? cliente.monto_pagado
             : (planPrices[cliente.plan] || 0);
-          return sum + monto;
-        }, 0);
+
+          ingresos += monto;
+
+          // Acumular por método de pago
+          const metodo = cliente.metodo_pago || 'efectivo';
+          if (metodo in ingresosPorMetodo) {
+            ingresosPorMetodo[metodo as keyof typeof ingresosPorMetodo] += monto;
+          }
+        });
       }
 
       setStats({
         totalSocios: totalCount || 0,
         pagosPendientes: pendientesCount || 0,
         ingresosMes: ingresos,
+        ingresosPorMetodo,
       });
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
@@ -269,6 +293,48 @@ export default function Dashboard() {
               </div>
               <h3 className="text-gray-300 font-semibold mb-1">Ingresos del Mes</h3>
               <p className="text-sm text-gray-500">Mes actual</p>
+            </div>
+          </div>
+
+          {/* Payment Method Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Efectivo */}
+            <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/20 rounded-xl p-5 hover:border-green-500/40 transition-all">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">💵</span>
+                <h4 className="text-green-400 font-semibold">Efectivo</h4>
+              </div>
+              {loading ? (
+                <Loader2 className="w-6 h-6 text-green-400 animate-spin" />
+              ) : (
+                <p className="text-2xl font-bold text-white">S/ {stats.ingresosPorMetodo.efectivo.toLocaleString()}</p>
+              )}
+            </div>
+
+            {/* Yape */}
+            <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-xl p-5 hover:border-purple-500/40 transition-all">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">📱</span>
+                <h4 className="text-purple-400 font-semibold">Yape</h4>
+              </div>
+              {loading ? (
+                <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+              ) : (
+                <p className="text-2xl font-bold text-white">S/ {stats.ingresosPorMetodo.yape.toLocaleString()}</p>
+              )}
+            </div>
+
+            {/* Transferencia */}
+            <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-xl p-5 hover:border-blue-500/40 transition-all">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-2xl">🏦</span>
+                <h4 className="text-blue-400 font-semibold">Transferencia</h4>
+              </div>
+              {loading ? (
+                <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+              ) : (
+                <p className="text-2xl font-bold text-white">S/ {stats.ingresosPorMetodo.transferencia.toLocaleString()}</p>
+              )}
             </div>
           </div>
 

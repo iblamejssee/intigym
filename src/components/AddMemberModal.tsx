@@ -20,6 +20,7 @@ export interface MemberFormData {
   plan: string;
   fechaInicio: string;
   montoPagado: number;
+  metodoPago: string;
   foto: File | null;
 }
 
@@ -39,6 +40,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
     plan: '',
     fechaInicio: '',
     montoPagado: 0,
+    metodoPago: 'efectivo',
     foto: null,
   });
   const [dragActive, setDragActive] = useState(false);
@@ -155,6 +157,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
         plan: '',
         fechaInicio: '',
         montoPagado: 0,
+        metodoPago: 'efectivo',
         foto: null,
       });
       setPreview(null);
@@ -173,6 +176,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
       plan: '',
       fechaInicio: '',
       montoPagado: 0,
+      metodoPago: 'efectivo',
       foto: null,
     });
     setPreview(null);
@@ -360,7 +364,47 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                     placeholder="120.00"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Se actualizará automáticamente al seleccionar un plan</p>
+                {formData.plan && (() => {
+                  const planSeleccionado = planes.find(p => p.nombre === formData.plan);
+                  if (planSeleccionado) {
+                    const deuda = planSeleccionado.precio - formData.montoPagado;
+                    if (deuda > 0) {
+                      return (
+                        <p className="text-sm text-yellow-400 mt-2 font-semibold">
+                          ⚠️ Deuda pendiente: S/ {deuda.toFixed(2)}
+                        </p>
+                      );
+                    } else if (deuda < 0) {
+                      return (
+                        <p className="text-sm text-green-400 mt-2">
+                          ✓ Pago completo (sobra: S/ {Math.abs(deuda).toFixed(2)})
+                        </p>
+                      );
+                    } else {
+                      return (
+                        <p className="text-sm text-green-400 mt-2">
+                          ✓ Pago completo
+                        </p>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Método de Pago *</label>
+                <select
+                  name="metodoPago"
+                  value={formData.metodoPago}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
+                >
+                  <option value="efectivo" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>💵 Efectivo</option>
+                  <option value="yape" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>📱 Yape</option>
+                  <option value="transferencia" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>🏦 Transferencia</option>
+                </select>
               </div>
 
               <div>
