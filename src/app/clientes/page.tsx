@@ -488,7 +488,7 @@ export default function ClientesPage() {
                               )}
 
                               <button
-                                onClick={() => setSelectedQR(cliente.dni)}
+                                onClick={() => openQRViewModal(cliente)}
                                 className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-600/10 rounded-lg transition-all"
                                 title="Ver QR"
                               >
