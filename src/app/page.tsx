@@ -251,7 +251,7 @@ export default function Dashboard() {
       }
 
       // Insertar cliente en la base de datos
-      const { error } = await supabase
+      const { data: newCliente, error } = await supabase
         .from('clientes')
         .insert([
           {
@@ -267,12 +267,31 @@ export default function Dashboard() {
             foto_url: fotoUrl,
             monto_pagado: data.montoPagado,
           },
-        ]);
+        ])
+        .select()
+        .single();
 
       if (error) {
         console.error('Error al agregar cliente:', error);
         toast.error(`Error al agregar cliente: ${error.message}`);
         return;
+      }
+
+      // Registrar el pago inicial en historial_pagos si hay monto pagado
+      if (newCliente && data.montoPagado && data.montoPagado > 0) {
+        const { error: pagoError } = await supabase
+          .from('historial_pagos')
+          .insert([{
+            cliente_id: newCliente.id,
+            monto: data.montoPagado,
+            metodo_pago: data.metodoPago || 'efectivo',
+            concepto: 'Pago inicial de membresía',
+            created_at: data.fechaInicio ? new Date(data.fechaInicio).toISOString() : new Date().toISOString()
+          }]);
+
+        if (pagoError) {
+          console.error('Error al registrar pago en historial:', pagoError);
+        }
       }
 
       setIsAddModalOpen(false);

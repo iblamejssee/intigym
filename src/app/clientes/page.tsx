@@ -182,7 +182,8 @@ export default function ClientesPage() {
               cliente_id: newCliente.id,
               monto: data.montoPagado,
               metodo_pago: data.metodoPago || 'efectivo',
-              concepto: 'Pago inicial de membresía'
+              concepto: 'Pago inicial de membresía',
+              created_at: data.fechaInicio ? new Date(data.fechaInicio).toISOString() : new Date().toISOString()
             }]);
 
           if (pagoError) {
