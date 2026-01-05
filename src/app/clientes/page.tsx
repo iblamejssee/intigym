@@ -7,9 +7,11 @@ import EditMemberModal from '@/components/EditMemberModal';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import QRScannerModal from '@/components/QRScannerModal';
 import QRViewModal from '@/components/QRViewModal';
-import { Users, Plus, Edit, Trash2, QrCode, User as UserIcon, Loader2, Search, Eye } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, QrCode, User as UserIcon, Loader2, Search, Eye, MessageCircle, AlertTriangle } from 'lucide-react';
 import { supabase, ClienteDB, calcularFechaVencimiento, actualizarEstadosPago } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getDaysUntilExpiration, isExpiringSoon } from '@/lib/utils';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 // Tipo para los clientes (compatible con la interfaz anterior)
 interface Cliente {
@@ -463,8 +465,30 @@ export default function ClientesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
+                              {/* Indicador de vencimiento próximo */}
+                              {cliente.fechaVencimiento && isExpiringSoon(cliente.fechaVencimiento) && (
+                                <div className="relative group">
+                                  <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center border border-orange-500/40 animate-pulse">
+                                    <AlertTriangle className="w-4 h-4 text-orange-400" />
+                                  </div>
+                                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                                    Vence en {getDaysUntilExpiration(cliente.fechaVencimiento)} días
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Botón WhatsApp */}
+                              {cliente.fechaVencimiento && (
+                                <WhatsAppButton
+                                  telefono={cliente.telefono || ''}
+                                  nombre={cliente.nombre}
+                                  fechaVencimiento={cliente.fechaVencimiento}
+                                  size="sm"
+                                />
+                              )}
+
                               <button
-                                onClick={() => openQRViewModal(cliente)}
+                                onClick={() => setSelectedQR(cliente.dni)}
                                 className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-600/10 rounded-lg transition-all"
                                 title="Ver QR"
                               >
