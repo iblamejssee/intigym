@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
 import AddMemberModal, { MemberFormData } from '@/components/AddMemberModal';
 import EditMemberModal from '@/components/EditMemberModal';
+import RenewMemberModal, { RenewalFormData } from '@/components/RenewMemberModal';
 import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import QRScannerModal from '@/components/QRScannerModal';
 import QRViewModal from '@/components/QRViewModal';
-import { Users, Plus, Edit, Trash2, QrCode, User as UserIcon, Loader2, Search, Eye, MessageCircle, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, QrCode, User as UserIcon, Loader2, Search, Eye, MessageCircle, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { supabase, ClienteDB, calcularFechaVencimiento, actualizarEstadosPago } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { getDaysUntilExpiration, isExpiringSoon } from '@/lib/utils';
@@ -59,6 +60,8 @@ export default function ClientesPage() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null);
   const [clienteQRView, setClienteQRView] = useState<Cliente | null>(null);
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [selectedClienteForRenewal, setSelectedClienteForRenewal] = useState<Cliente | null>(null);
 
   // Cargar clientes desde Supabase
   useEffect(() => {
@@ -322,6 +325,53 @@ export default function ClientesPage() {
     setIsQRViewModalOpen(true);
   };
 
+  const openRenewModal = (cliente: Cliente) => {
+    setSelectedClienteForRenewal(cliente);
+    setIsRenewModalOpen(true);
+  };
+
+  const handleRenewMember = async (formData: RenewalFormData) => {
+    if (!selectedClienteForRenewal) return;
+
+    try {
+      // 1. Actualizar cliente
+      const { error: clientError } = await supabase
+        .from('clientes')
+        .update({
+          plan: formData.plan,
+          fecha_inicio: formData.fechaInicio,
+          fecha_vencimiento: formData.fechaVencimiento,
+          estado_pago: 'al-dia',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedClienteForRenewal.id);
+
+      if (clientError) throw clientError;
+
+      // 2. Insertar historial de pagos
+      const { error: historyError } = await supabase
+        .from('historial_pagos')
+        .insert([{
+          cliente_id: selectedClienteForRenewal.id,
+          monto: formData.montoPagado,
+          metodo_pago: formData.metodoPago,
+          concepto: `Renovación de membresía - ${formData.plan}`,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (historyError) throw historyError;
+
+      // 3. Recargar y cerrar
+      await loadClientes();
+      setIsRenewModalOpen(false);
+      setSelectedClienteForRenewal(null);
+      toast.success('Membresía renovada exitosamente');
+    } catch (error) {
+      console.error('Error al renovar:', error);
+      toast.error('Error al renovar membresía');
+    }
+  };
+
   const handleQRScan = (qrData: string) => {
     // Buscar cliente por DNI (que es el QR code)
     const cliente = clientes.find(c => c.dni === qrData);
@@ -489,6 +539,14 @@ export default function ClientesPage() {
                               )}
 
                               <button
+                                onClick={() => openRenewModal(cliente)}
+                                className="p-2 text-green-400 hover:text-green-300 hover:bg-green-600/10 rounded-lg transition-all"
+                                title="Renovar Membresía"
+                              >
+                                <RefreshCcw className="w-4 h-4" />
+                              </button>
+
+                              <button
                                 onClick={() => openQRViewModal(cliente)}
                                 className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-600/10 rounded-lg transition-all"
                                 title="Ver QR"
@@ -580,6 +638,24 @@ export default function ClientesPage() {
           dni={clienteQRView.dni}
           telefono={clienteQRView.telefono}
           plan={clienteQRView.plan}
+        />
+      )}
+
+      {selectedClienteForRenewal && (
+        <RenewMemberModal
+          isOpen={isRenewModalOpen}
+          onClose={() => {
+            setIsRenewModalOpen(false);
+            setSelectedClienteForRenewal(null);
+          }}
+          onSubmit={handleRenewMember}
+          memberData={{
+            id: selectedClienteForRenewal.id,
+            nombre: selectedClienteForRenewal.nombre,
+            dni: selectedClienteForRenewal.dni,
+            planActual: selectedClienteForRenewal.plan,
+            fechaVencimiento: selectedClienteForRenewal.fechaVencimiento || ''
+          }}
         />
       )}
     </div>

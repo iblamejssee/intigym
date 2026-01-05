@@ -6,6 +6,7 @@ import { Search, Loader2, CheckCircle, XCircle, QrCode, Keyboard, Camera } from 
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import RenewMemberModal, { RenewalFormData } from '@/components/RenewMemberModal';
 
 interface SearchResult {
     nombre: string;
@@ -13,6 +14,7 @@ interface SearchResult {
     vencido: boolean;
     fechaVencimiento?: string;
     dni: string;
+    id: number;
 }
 
 export default function AccesoPage() {
@@ -21,6 +23,7 @@ export default function AccesoPage() {
     const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
     const [searching, setSearching] = useState(false);
     const [scanning, setScanning] = useState(false);
+    const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
     const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
     useEffect(() => {
@@ -79,7 +82,7 @@ export default function AccesoPage() {
         try {
             const { data, error } = await supabase
                 .from('clientes')
-                .select('nombre, plan, fecha_vencimiento, dni')
+                .select('id, nombre, plan, fecha_vencimiento, dni')
                 .eq('dni', dniToValidate)
                 .single();
 
@@ -100,6 +103,7 @@ export default function AccesoPage() {
                 vencido: vencido,
                 fechaVencimiento: data.fecha_vencimiento,
                 dni: data.dni,
+                id: data.id,
             });
 
             if (vencido) {
@@ -112,6 +116,49 @@ export default function AccesoPage() {
             toast.error('Error al validar acceso');
         } finally {
             setSearching(false);
+        }
+    };
+
+    const handleRenewMember = async (formData: RenewalFormData) => {
+        if (!searchResult) return;
+
+        try {
+            // 1. Actualizar cliente
+            const { error: updateError } = await supabase
+                .from('clientes')
+                .update({
+                    plan: formData.plan,
+                    fecha_inicio: formData.fechaInicio,
+                    fecha_vencimiento: formData.fechaVencimiento,
+                    estado_pago: 'al-dia',
+                    monto_pagado: formData.montoPagado,
+                })
+                .eq('id', searchResult.id);
+
+            if (updateError) throw updateError;
+
+            // 2. Insertar en historial de pagos
+            const { error: historyError } = await supabase
+                .from('historial_pagos')
+                .insert([{
+                    cliente_id: searchResult.id,
+                    monto: formData.montoPagado,
+                    metodo_pago: formData.metodoPago,
+                    concepto: `Renovación de membresía - ${formData.plan}`,
+                    created_at: new Date().toISOString()
+                }]);
+
+            if (historyError) throw historyError;
+
+            toast.success('Membresía renovada exitosamente');
+            setIsRenewModalOpen(false);
+
+            // 3. Recargar validación
+            handleValidateAccess(searchResult.dni);
+
+        } catch (error) {
+            console.error('Error al renovar:', error);
+            toast.error('Error al renovar membresía');
         }
     };
 
@@ -274,9 +321,15 @@ export default function AccesoPage() {
                                                 <p className="text-red-300 font-bold text-lg">
                                                     ⚠️ MEMBRESÍA VENCIDA
                                                 </p>
-                                                <p className="text-red-400 text-sm mt-1">
+                                                <p className="text-red-400 text-sm mt-1 mb-4">
                                                     El socio debe renovar su membresía para poder ingresar
                                                 </p>
+                                                <button
+                                                    onClick={() => setIsRenewModalOpen(true)}
+                                                    className="w-full px-8 py-3 bg-gradient-to-r from-[#AB8745] to-[#D4A865] hover:from-[#8B6935] hover:to-[#B68A45] text-white rounded-lg font-bold shadow-lg shadow-[#AB8745]/20 animate-pulse transition-all"
+                                                >
+                                                    Renovar Membresía Ahora
+                                                </button>
                                             </div>
                                         )}
 
@@ -293,6 +346,22 @@ export default function AccesoPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Modal de Renovación */}
+            {searchResult && (
+                <RenewMemberModal
+                    isOpen={isRenewModalOpen}
+                    onClose={() => setIsRenewModalOpen(false)}
+                    onSubmit={handleRenewMember}
+                    memberData={{
+                        id: searchResult.id,
+                        nombre: searchResult.nombre,
+                        dni: searchResult.dni,
+                        planActual: searchResult.plan,
+                        fechaVencimiento: searchResult.fechaVencimiento || ''
+                    }}
+                />
+            )}
         </div>
     );
 }
