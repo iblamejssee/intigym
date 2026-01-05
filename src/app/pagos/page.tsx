@@ -28,29 +28,19 @@ export default function PagosPage() {
     pendientes: 0,
     vencidos: 0,
   });
-  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
-  const [planPrices, setPlanPrices] = useState<Record<string, number>>({});
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPaymentData, setSelectedPaymentData] = useState<{ id: number, deuda: number, nombre: string } | null>(null);
 
   useEffect(() => {
     loadPaymentStats();
 
-    // Recargar cuando la página se vuelve visible (ej: al volver desde otra página)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadPaymentStats();
-      }
+      if (document.visibilityState === 'visible') loadPaymentStats();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Recargar cada 30 segundos mientras la página está abierta
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadPaymentStats();
-      }
+      if (document.visibilityState === 'visible') loadPaymentStats();
     }, 30000);
 
     return () => {
@@ -67,47 +57,44 @@ export default function PagosPage() {
       inicioMes.setDate(1);
       const inicioMesStr = inicioMes.toISOString().split('T')[0];
 
-      // Cargar precios desde configuración
-      const preciosPlanes = await cargarPreciosPlanes();
-      setPlanPrices(preciosPlanes);
-
-      // Total del Mes (clientes registrados este mes)
-      const { data: clientesMes } = await supabase
-        .from('clientes')
-        .select('plan, monto_pagado')
+      // 1. Total del Mes: Suma de historial_pagos del mes actual
+      const { data: pagosMes } = await supabase
+        .from('historial_pagos')
+        .select('monto')
         .gte('created_at', inicioMesStr);
 
-      let totalMes = 0;
-      if (clientesMes) {
-        totalMes = clientesMes.reduce((sum, cliente) => {
-          // Usar monto_pagado si existe y es mayor a 0, sino usar precio del plan
-          const monto = (cliente.monto_pagado && cliente.monto_pagado > 0)
-            ? cliente.monto_pagado
-            : (preciosPlanes[cliente.plan] || 0);
-          return sum + monto;
-        }, 0);
-      }
+      const totalMes = pagosMes?.reduce((sum, pago) => sum + (pago.monto || 0), 0) || 0;
 
-      // Pendientes (clientes con fecha_vencimiento < hoy)
+      // 2. Pendientes y Vencidos (mismo lógica basada en clientes)
       const { count: pendientesCount } = await supabase
         .from('clientes')
         .select('*', { count: 'exact', head: true })
         .lt('fecha_vencimiento', hoy);
 
-      // Vencidos (mismo que pendientes en este caso)
-      const vencidosCount = pendientesCount || 0;
-
-      // Historial de pagos (todos los clientes ordenados por fecha de registro)
-      const { data: historial } = await supabase
-        .from('clientes')
-        .select('id, nombre, dni, plan, monto_pagado, created_at, fecha_vencimiento')
+      // 3. Historial de Pagos: Fetch directo de historial_pagos con join a clientes
+      const { data: historial, error: historyError } = await supabase
+        .from('historial_pagos')
+        .select(`
+          id,
+          monto,
+          metodo_pago,
+          concepto,
+          created_at,
+          clientes (
+            nombre,
+            dni,
+            plan
+          )
+        `)
         .order('created_at', { ascending: false })
         .limit(50);
+
+      if (historyError) throw historyError;
 
       setStats({
         totalMes,
         pendientes: pendientesCount || 0,
-        vencidos: vencidosCount,
+        vencidos: pendientesCount || 0,
       });
 
       setPaymentHistory(historial || []);
@@ -128,14 +115,12 @@ export default function PagosPage() {
     <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
       <Sidebar />
 
-      {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-[#0a0a0a]">
         <div className="p-6 md:p-8">
-          {/* Header */}
           <div className="mb-8 flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold text-white mb-2">Pagos</h2>
-              <p className="text-gray-400">Gestión de pagos y facturación</p>
+              <p className="text-gray-400">Gestión de pagos y flujo de caja</p>
             </div>
             <button
               onClick={handleRefresh}
@@ -157,11 +142,11 @@ export default function PagosPage() {
                 {loading ? (
                   <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
                 ) : (
-                  <span className="text-3xl font-bold text-green-400">S/ {stats.totalMes.toLocaleString()}</span>
+                  <span className="text-3xl font-bold text-green-400">S/ {stats.totalMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 )}
               </div>
               <h3 className="text-gray-300 font-semibold mb-1">Total del Mes</h3>
-              <p className="text-sm text-gray-500">Ingresos recibidos</p>
+              <p className="text-sm text-gray-500">Ingresos reales (Enero)</p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
@@ -175,8 +160,8 @@ export default function PagosPage() {
                   <span className="text-3xl font-bold text-yellow-400">{stats.pendientes}</span>
                 )}
               </div>
-              <h3 className="text-gray-300 font-semibold mb-1">Renovaciones Pendientes</h3>
-              <p className="text-sm text-gray-500">Membresías vencidas</p>
+              <h3 className="text-gray-300 font-semibold mb-1">Membresías Vencidas</h3>
+              <p className="text-sm text-gray-500">Requieren renovación</p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
@@ -190,16 +175,16 @@ export default function PagosPage() {
                   <span className="text-3xl font-bold text-[#D4A865]">{stats.vencidos}</span>
                 )}
               </div>
-              <h3 className="text-gray-300 font-semibold mb-1">Vencidos</h3>
-              <p className="text-sm text-gray-500">Requieren atención</p>
+              <h3 className="text-gray-300 font-semibold mb-1">Total Debts</h3>
+              <p className="text-sm text-gray-500">Clientes con deuda</p>
             </div>
           </div>
 
-          {/* Historial de Pagos */}
+          {/* Historial de Transacciones */}
           <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-[#AB8745]/20">
-              <h3 className="text-xl font-bold text-white">Historial de Pagos</h3>
-              <p className="text-sm text-gray-400 mt-1">Registro de todas las inscripciones y renovaciones</p>
+              <h3 className="text-xl font-bold text-white">Historial de Transacciones</h3>
+              <p className="text-sm text-gray-400 mt-1">Registro detallado de ingresos (Tiempo Real)</p>
             </div>
 
             {loading ? (
@@ -215,128 +200,53 @@ export default function PagosPage() {
                 <table className="w-full">
                   <thead className="bg-white/5 border-b border-[#AB8745]/20">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto Pagado</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Deuda</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Acción</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Concepto</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Método</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#AB8745]/10">
-                    {paymentHistory.map((pago) => {
-                      const precioPlan = planPrices[pago.plan] || 0;
-                      const montoPagado = (pago.monto_pagado && pago.monto_pagado > 0) ? pago.monto_pagado : 0;
-                      const deuda = precioPlan - montoPagado;
-                      const tieneDeuda = deuda > 0;
-
-                      const hoy = new Date();
-                      hoy.setHours(0, 0, 0, 0);
-                      const vencimiento = new Date(pago.fecha_vencimiento);
-                      vencimiento.setHours(0, 0, 0, 0);
-                      const estaVencido = vencimiento < hoy;
-
-                      const handleCompletarPago = async (metodoPago: string) => {
-                        try {
-                          const montoRestante = deuda;
-
-                          // Registrar el pago en historial_pagos
-                          const { error: pagoError } = await supabase
-                            .from('historial_pagos')
-                            .insert([{
-                              cliente_id: pago.id,
-                              monto: montoRestante,
-                              metodo_pago: metodoPago,
-                              concepto: 'Pago complementario de membresía'
-                            }]);
-
-                          if (pagoError) {
-                            toast.error('Error al registrar el pago');
-                            console.error(pagoError);
-                            return;
-                          }
-
-                          // Actualizar monto_pagado en clientes
-                          const { error } = await supabase
-                            .from('clientes')
-                            .update({ monto_pagado: precioPlan })
-                            .eq('id', pago.id);
-
-                          if (error) {
-                            toast.error('Error al completar el pago');
-                            return;
-                          }
-
-                          toast.success('Pago completado exitosamente');
-                          loadPaymentStats();
-                        } catch (error) {
-                          console.error('Error:', error);
-                          toast.error('Error al completar el pago');
-                        }
-                      };
-
-                      return (
-                        <tr key={pago.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
+                    {paymentHistory.map((pago) => (
+                      <tr key={pago.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-300 font-medium">
+                            {new Date(pago.created_at).toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {pago.clientes ? (
                             <div>
-                              <div className="text-sm font-medium text-white">{pago.nombre}</div>
-                              <div className="text-xs text-gray-400">DNI: {pago.dni}</div>
+                              <div className="text-sm font-medium text-white">{pago.clientes.nombre}</div>
+                              <div className="text-xs text-gray-400">DNI: {pago.clientes.dni}</div>
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-600/30 capitalize">
-                              {pago.plan}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-green-400 font-semibold">S/ {montoPagado.toFixed(2)}</div>
-                            <div className="text-xs text-gray-500">de S/ {precioPlan.toFixed(2)}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {tieneDeuda ? (
-                              <div className="text-sm text-yellow-400 font-semibold">S/ {deuda.toFixed(2)}</div>
-                            ) : (
-                              <div className="text-sm text-green-400">✓ Completo</div>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-300">
-                              {new Date(pago.created_at).toLocaleDateString('es-ES', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
-                              })}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${estaVencido
-                                ? 'bg-[#AB8745]/20 text-[#D4A865] border border-[#AB8745]/30'
-                                : 'bg-green-600/20 text-green-400 border border-green-600/30'
-                                }`}
-                            >
-                              {estaVencido ? 'Vencido' : 'Activo'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {tieneDeuda ? (
-                              <button
-                                onClick={() => {
-                                  setSelectedPaymentData({ id: pago.id, deuda, nombre: pago.nombre });
-                                  setShowPaymentModal(true);
-                                }}
-                                className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
-                              >
-                                Completar Pago
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-500">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          ) : (
+                            <span className="text-sm text-red-400">Cliente Eliminado</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm text-gray-300">{pago.concepto || 'Pago de membresía'}</span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${pago.metodo_pago === 'yape'
+                              ? 'bg-purple-600/20 text-purple-400 border-purple-600/30'
+                              : 'bg-green-600/20 text-green-400 border-green-600/30'
+                            }`}>
+                            {pago.metodo_pago || 'efectivo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-bold text-[#D4A865]">S/ {pago.monto.toFixed(2)}</div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -344,151 +254,6 @@ export default function PagosPage() {
           </div>
         </div>
       </main>
-
-      {/* Payment Method Modal */}
-      {showPaymentModal && selectedPaymentData && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a1a] border border-[#AB8745]/30 rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-bold text-white mb-2">Completar Pago</h3>
-            <p className="text-gray-400 mb-6">
-              {selectedPaymentData.nombre} - Deuda: <span className="text-yellow-400 font-bold">S/ {selectedPaymentData.deuda.toFixed(2)}</span>
-            </p>
-
-            <p className="text-sm text-gray-300 mb-4">Selecciona el método de pago:</p>
-
-            <div className="space-y-3 mb-6">
-              <button
-                onClick={async () => {
-                  const handleCompletarPago = async (metodoPago: string) => {
-                    try {
-                      const { error: pagoError } = await supabase
-                        .from('historial_pagos')
-                        .insert([{
-                          cliente_id: selectedPaymentData.id,
-                          monto: selectedPaymentData.deuda,
-                          metodo_pago: metodoPago,
-                          concepto: 'Pago complementario de membresía'
-                        }]);
-
-                      if (pagoError) {
-                        toast.error('Error al registrar el pago');
-                        console.error(pagoError);
-                        return;
-                      }
-
-                      // Calcular nuevo monto_pagado
-                      const { data: cliente } = await supabase
-                        .from('clientes')
-                        .select('monto_pagado')
-                        .eq('id', selectedPaymentData.id)
-                        .single();
-
-                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
-
-                      const { error } = await supabase
-                        .from('clientes')
-                        .update({ monto_pagado: nuevoMonto })
-                        .eq('id', selectedPaymentData.id);
-
-                      if (error) {
-                        toast.error('Error al completar el pago');
-                        return;
-                      }
-
-                      toast.success('Pago completado exitosamente');
-                      setShowPaymentModal(false);
-                      setSelectedPaymentData(null);
-                      loadPaymentStats();
-                    } catch (error) {
-                      console.error('Error:', error);
-                      toast.error('Error al completar el pago');
-                    }
-                  };
-                  await handleCompletarPago('efectivo');
-                }}
-                className="w-full p-4 rounded-xl border-2 border-green-500 bg-green-500/10 hover:bg-green-500/20 transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">💵</span>
-                  <div className="text-left">
-                    <p className="text-white font-semibold">Efectivo</p>
-                    <p className="text-sm text-gray-400">Pago en efectivo</p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={async () => {
-                  const handleCompletarPago = async (metodoPago: string) => {
-                    try {
-                      const { error: pagoError } = await supabase
-                        .from('historial_pagos')
-                        .insert([{
-                          cliente_id: selectedPaymentData.id,
-                          monto: selectedPaymentData.deuda,
-                          metodo_pago: metodoPago,
-                          concepto: 'Pago complementario de membresía'
-                        }]);
-
-                      if (pagoError) {
-                        toast.error('Error al registrar el pago');
-                        console.error(pagoError);
-                        return;
-                      }
-
-                      const { data: cliente } = await supabase
-                        .from('clientes')
-                        .select('monto_pagado')
-                        .eq('id', selectedPaymentData.id)
-                        .single();
-
-                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
-
-                      const { error } = await supabase
-                        .from('clientes')
-                        .update({ monto_pagado: nuevoMonto })
-                        .eq('id', selectedPaymentData.id);
-
-                      if (error) {
-                        toast.error('Error al completar el pago');
-                        return;
-                      }
-
-                      toast.success('Pago completado exitosamente');
-                      setShowPaymentModal(false);
-                      setSelectedPaymentData(null);
-                      loadPaymentStats();
-                    } catch (error) {
-                      console.error('Error:', error);
-                      toast.error('Error al completar el pago');
-                    }
-                  };
-                  await handleCompletarPago('yape');
-                }}
-                className="w-full p-4 rounded-xl border-2 border-purple-500 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">📱</span>
-                  <div className="text-left">
-                    <p className="text-white font-semibold">Yape</p>
-                    <p className="text-sm text-gray-400">Pago digital</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            <button
-              onClick={() => {
-                setShowPaymentModal(false);
-                setSelectedPaymentData(null);
-              }}
-              className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
