@@ -48,7 +48,6 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
   }, [isOpen, scanning]);
 
   const onScanSuccess = async (decodedText: string) => {
-    console.log('QR Escaneado:', decodedText);
 
     // Detener el scanner
     if (scannerRef.current) {
@@ -111,7 +110,7 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
   const onScanError = (errorMessage: string) => {
     // Ignorar errores de escaneo continuo
     if (!errorMessage.includes('NotFoundException')) {
-      console.log('Error de escaneo:', errorMessage);
+      // Ignorar errores de escaneo continuo
     }
   };
 

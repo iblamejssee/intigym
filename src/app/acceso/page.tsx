@@ -61,7 +61,7 @@ export default function AccesoPage() {
     const onScanError = (errorMessage: string) => {
         // Ignorar errores de escaneo continuo
         if (!errorMessage.includes('NotFoundException')) {
-            console.log('Error de escaneo:', errorMessage);
+            // Ignorar errores de escaneo continuo
         }
     };
 
