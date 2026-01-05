@@ -64,10 +64,10 @@ export default function Dashboard() {
         .select('*', { count: 'exact', head: true })
         .lt('fecha_vencimiento', hoy);
 
-      // Ingresos del Mes (clientes registrados este mes)
-      const { data: clientesMes } = await supabase
-        .from('clientes')
-        .select('plan, monto_pagado, metodo_pago')
+      // Ingresos del Mes - Calcular desde historial_pagos
+      const { data: pagosMes } = await supabase
+        .from('historial_pagos')
+        .select('monto, metodo_pago, created_at')
         .gte('created_at', inicioMesStr);
 
       let ingresos = 0;
@@ -76,19 +76,14 @@ export default function Dashboard() {
         yape: 0,
       };
 
-      if (clientesMes) {
-        clientesMes.forEach(cliente => {
-          // Usar monto_pagado si existe y es mayor a 0, sino usar precio del plan
-          const monto = (cliente.monto_pagado && cliente.monto_pagado > 0)
-            ? cliente.monto_pagado
-            : (planPrices[cliente.plan] || 0);
-
-          ingresos += monto;
+      if (pagosMes) {
+        pagosMes.forEach(pago => {
+          ingresos += pago.monto || 0;
 
           // Acumular por método de pago
-          const metodo = cliente.metodo_pago || 'efectivo';
+          const metodo = pago.metodo_pago || 'efectivo';
           if (metodo in ingresosPorMetodo) {
-            ingresosPorMetodo[metodo as keyof typeof ingresosPorMetodo] += monto;
+            ingresosPorMetodo[metodo as keyof typeof ingresosPorMetodo] += (pago.monto || 0);
           }
         });
       }
