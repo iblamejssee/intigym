@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import AddMemberModal, { MemberFormData } from '@/components/AddMemberModal';
 import MemberSuccessModal from '@/components/MemberSuccessModal';
-import { Users, CreditCard, DollarSign, Plus, Loader2, QrCode, Search, CheckCircle, XCircle } from 'lucide-react';
+import { Users, CreditCard, DollarSign, Plus, Loader2, QrCode, Search, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
 import { supabase, cargarPreciosPlanes, calcularFechaVencimiento } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { getDaysUntilExpiration, isExpiringSoon, getExpirationAlertColor } from '@/lib/utils';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 interface DashboardStats {
   totalSocios: number;
@@ -17,6 +19,15 @@ interface DashboardStats {
     efectivo: number;
     yape: number;
   };
+}
+
+interface ExpiringMember {
+  id: number;
+  nombre: string;
+  telefono: string;
+  plan: string;
+  fecha_vencimiento: string;
+  dias_restantes: number;
 }
 
 export default function Dashboard() {
@@ -35,6 +46,7 @@ export default function Dashboard() {
       yape: 0,
     },
   });
+  const [expiringMembers, setExpiringMembers] = useState<ExpiringMember[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -94,11 +106,42 @@ export default function Dashboard() {
         ingresosMes: ingresos,
         ingresosPorMetodo,
       });
+
+      // Cargar socios próximos a vencer
+      await loadExpiringMembers();
     } catch (error) {
       console.error('Error al cargar estadísticas:', error);
       toast.error('Error al cargar estadísticas del dashboard');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadExpiringMembers = async () => {
+    try {
+      const hoy = new Date();
+      const en5Dias = new Date();
+      en5Dias.setDate(hoy.getDate() + 5);
+
+      const { data: clientes, error } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono, plan, fecha_vencimiento')
+        .gte('fecha_vencimiento', hoy.toISOString().split('T')[0])
+        .lte('fecha_vencimiento', en5Dias.toISOString().split('T')[0])
+        .order('fecha_vencimiento', { ascending: true });
+
+      if (error) throw error;
+
+      if (clientes) {
+        const membersWithDays: ExpiringMember[] = clientes.map(cliente => ({
+          ...cliente,
+          dias_restantes: getDaysUntilExpiration(cliente.fecha_vencimiento)
+        }));
+
+        setExpiringMembers(membersWithDays);
+      }
+    } catch (error) {
+      console.error('Error al cargar socios próximos a vencer:', error);
     }
   };
 
@@ -225,8 +268,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      <Sidebar />
+    <div className="flex min-h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      <Sidebar expiringCount={expiringMembers.length} />
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-[#0a0a0a]">
@@ -385,6 +428,66 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Próximos Vencimientos */}
+          {expiringMembers.length > 0 && (
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30 animate-pulse">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-white">Próximos Vencimientos</h3>
+                  <p className="text-sm text-gray-400">Membresías que vencen en los próximos 5 días</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {expiringMembers.map((member) => {
+                  const colors = getExpirationAlertColor(member.dias_restantes);
+
+                  return (
+                    <div
+                      key={member.id}
+                      className={`${colors.bg} ${colors.border} border-2 rounded-2xl p-5 shadow-xl hover:scale-105 transition-all duration-300 backdrop-blur-xl`}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h4 className="text-white font-bold text-lg mb-1">{member.nombre}</h4>
+                          <p className="text-gray-400 text-sm">{member.plan}</p>
+                        </div>
+                        <div className={`${colors.badge} px-3 py-1 rounded-full flex items-center gap-1.5`}>
+                          <Clock className="w-4 h-4 text-white" />
+                          <span className="text-white font-bold text-sm">
+                            {member.dias_restantes} {member.dias_restantes === 1 ? 'día' : 'días'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 border-t border-white/10">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Vence el</p>
+                          <p className={`${colors.text} font-semibold text-sm`}>
+                            {new Date(member.fecha_vencimiento).toLocaleDateString('es-PE', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                        <WhatsAppButton
+                          telefono={member.telefono}
+                          nombre={member.nombre}
+                          fechaVencimiento={member.fecha_vencimiento}
+                          size="md"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Resumen Rápido */}
           <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl p-6">

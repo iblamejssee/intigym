@@ -7,7 +7,11 @@ import { Home, Users, CreditCard, Settings, ChevronLeft, ChevronRight, LogOut, Q
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-export default function Sidebar() {
+interface SidebarProps {
+  expiringCount?: number;
+}
+
+export default function Sidebar({ expiringCount = 0 }: SidebarProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const pathname = usePathname();
   const { signOut, user } = useAuth();
@@ -52,20 +56,33 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
-        {menuItems.map((item, index) => {
-          const Icon = item.icon;
+        {menuItems.map((item) => {
           const isActive = pathname === item.path;
+          const Icon = item.icon;
+          const isClientes = item.label === 'Clientes';
+          const showBadge = isClientes && expiringCount > 0;
+
           return (
             <Link
-              key={index}
+              key={item.path}
               href={item.path}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                ? 'bg-[#AB8745]/20 text-[#AB8745] border border-[#AB8745]/30 shadow-lg shadow-[#AB8745]/10'
-                : 'text-gray-400 hover:bg-white/5 hover:text-[#AB8745]'
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                  ? 'bg-gradient-to-r from-[#AB8745]/20 to-[#AB8745]/10 border border-[#AB8745]/30 text-[#D4A865] shadow-lg shadow-[#AB8745]/10'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
                 }`}
             >
-              <Icon className="w-5 h-5" />
-              {sidebarOpen && <span className="font-medium">{item.label}</span>}
+              <div className="relative">
+                <Icon className={`w-5 h-5 ${isActive ? 'text-[#D4A865]' : ''
+                  }`} />
+                {showBadge && (
+                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold text-white animate-pulse shadow-lg shadow-red-500/50">
+                    {expiringCount}
+                  </span>
+                )}
+              </div>
+              {sidebarOpen && (
+                <span className="font-medium">{item.label}</span>
+              )}
             </Link>
           );
         })}
