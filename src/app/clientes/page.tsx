@@ -172,9 +172,8 @@ export default function ClientesPage() {
       }
 
       if (newCliente) {
-        // TODO: Descomentar cuando se cree la tabla historial_pagos en Supabase
         // Registrar el pago inicial en historial_pagos si hay monto pagado
-        /* if (data.montoPagado && data.montoPagado > 0) {
+        if (data.montoPagado && data.montoPagado > 0) {
           const { error: pagoError } = await supabase
             .from('historial_pagos')
             .insert([{
@@ -188,7 +187,7 @@ export default function ClientesPage() {
             console.error('Error al registrar pago:', pagoError);
             // No bloqueamos la creación del cliente por error en historial
           }
-        } */
+        }
 
         // Recargar la lista completa desde Supabase para asegurar consistencia
         await loadClientes();
