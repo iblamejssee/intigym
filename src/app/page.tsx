@@ -559,7 +559,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {/* Ingresos Mensuales */}
+          {/* Ingresos Mensuales - Vista Compacta */}
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-gradient-to-br from-[#AB8745] to-[#D4A865] rounded-xl flex items-center justify-center shadow-lg shadow-[#AB8745]/30">
@@ -571,71 +571,76 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {monthlyRevenue.map((mes) => {
-                const porcentajeEfectivo = mes.total > 0 ? (mes.efectivo / mes.total) * 100 : 0;
-                const porcentajeYape = mes.total > 0 ? (mes.yape / mes.total) * 100 : 0;
+            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl overflow-hidden">
+              <div className="hidden md:flex items-center justify-between p-4 bg-black/40 border-b border-[#AB8745]/10 text-sm font-medium text-gray-400 uppercase tracking-wider">
+                <div className="w-1/4 pl-2">Mes</div>
+                <div className="flex-1 text-center">Desglose (Efectivo / Yape)</div>
+                <div className="w-1/6 text-right pr-2">Total</div>
+              </div>
 
-                return (
-                  <div
-                    key={mes.mes}
-                    className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-5 shadow-xl hover:scale-105 transition-all duration-300"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-white font-bold text-lg">{mes.mesNombre}</h4>
-                      <div className="text-2xl font-bold text-[#D4A865]">
-                        S/ {mes.total.toLocaleString()}
+              <div className="divide-y divide-white/5">
+                {monthlyRevenue.map((mes) => {
+                  const porcentajeEfectivo = mes.total > 0 ? (mes.efectivo / mes.total) * 100 : 0;
+                  const porcentajeYape = mes.total > 0 ? (mes.yape / mes.total) * 100 : 0;
+
+                  return (
+                    <div
+                      key={mes.mes}
+                      className="group p-4 hover:bg-white/5 transition-all duration-300 flex flex-col md:flex-row items-center gap-4"
+                    >
+                      {/* Mes */}
+                      <div className="w-full md:w-1/4 flex justify-between md:block">
+                        <span className="md:hidden text-gray-400 text-sm">Mes</span>
+                        <h4 className="text-white font-semibold text-lg md:text-base md:pl-2">{mes.mesNombre}</h4>
+                      </div>
+
+                      {/* Barra de Progreso Combinada */}
+                      <div className="w-full md:flex-1 space-y-2">
+                        {mes.total > 0 ? (
+                          <>
+                            <div className="flex w-full h-3 bg-gray-700/50 rounded-full overflow-hidden">
+                              <div
+                                className="bg-green-500 hover:bg-green-400 transition-all duration-500 relative group/bar"
+                                style={{ width: `${porcentajeEfectivo}%` }}
+                              >
+                                <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs py-1 px-2 rounded whitespace-nowrap pointer-events-none transition-opacity">
+                                  Efectivo: S/ {mes.efectivo}
+                                </div>
+                              </div>
+                              <div
+                                className="bg-purple-500 hover:bg-purple-400 transition-all duration-500 relative group/bar"
+                                style={{ width: `${porcentajeYape}%` }}
+                              >
+                                <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs py-1 px-2 rounded whitespace-nowrap pointer-events-none transition-opacity">
+                                  Yape: S/ {mes.yape}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-xs px-1">
+                              <span className="text-green-400 font-medium">
+                                Efectivo: <span className="text-white">S/ {mes.efectivo}</span> ({porcentajeEfectivo.toFixed(0)}%)
+                              </span>
+                              <span className="text-purple-400 font-medium">
+                                Yape: <span className="text-white">S/ {mes.yape}</span> ({porcentajeYape.toFixed(0)}%)
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-gray-500 text-sm text-center italic">Sin movimientos registrados</p>
+                        )}
+                      </div>
+
+                      {/* Total */}
+                      <div className="w-full md:w-1/6 flex justify-between md:block md:text-right md:pr-2">
+                        <span className="md:hidden text-gray-400 text-sm">Total Mensual</span>
+                        <div className={`font-bold text-xl md:text-lg ${mes.total > 0 ? 'text-[#D4A865]' : 'text-gray-600'}`}>
+                          S/ {mes.total.toLocaleString()}
+                        </div>
                       </div>
                     </div>
-
-                    {mes.total > 0 ? (
-                      <>
-                        <div className="space-y-3">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm text-gray-400 flex items-center gap-2">
-                                <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                                Efectivo
-                              </span>
-                              <span className="text-sm font-semibold text-green-400">
-                                S/ {mes.efectivo.toLocaleString()} ({porcentajeEfectivo.toFixed(0)}%)
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-700/50 rounded-full h-2">
-                              <div
-                                className="bg-gradient-to-r from-green-500 to-green-400 h-2 rounded-full transition-all duration-500"
-                                style={{ width: `${porcentajeEfectivo}%` }}
-                              ></div>
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm text-gray-400 flex items-center gap-2">
-                                <span className="w-3 h-3 bg-purple-500 rounded-full"></span>
-                                Yape
-                              </span>
-                              <span className="text-sm font-semibold text-purple-400">
-                                S/ {mes.yape.toLocaleString()} ({porcentajeYape.toFixed(0)}%)
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-700/50 rounded-full h-2">
-                              <div
-                                className="bg-gradient-to-r from-purple-500 to-purple-400 h-2 rounded-full transition-all duration-500"
-                                style={{ width: `${porcentajeYape}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center py-4">
-                        <p className="text-gray-500 text-sm">Sin ingresos registrados</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
