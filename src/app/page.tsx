@@ -172,14 +172,14 @@ export default function Dashboard() {
       while (currentDate <= endDate) {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
-        const mesKey = ${year}-;
+        const mesKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
         const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
           'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
         meses.push({
           mes: mesKey,
-          mesNombre: ${mesesNombres[month]} ,
+          mesNombre: `${mesesNombres[month]} ${year}`,
           efectivo: 0,
           yape: 0,
           total: 0
@@ -193,7 +193,7 @@ export default function Dashboard() {
           const fecha = new Date(pago.created_at);
           const year = fecha.getFullYear();
           const month = fecha.getMonth();
-          const mesKey = ${year}-;
+          const mesKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
           const mesData = meses.find(m => m.mes === mesKey);
           if (mesData) {
@@ -604,7 +604,7 @@ export default function Dashboard() {
                             <div className="w-full bg-gray-700/50 rounded-full h-2">
                               <div
                                 className="bg-gradient-to-r from-green-500 to-green-400 h-2 rounded-full transition-all duration-500"
-                                style={{ width: ${porcentajeEfectivo}% }}
+                                style={{ width: `${porcentajeEfectivo}%` }}
                               ></div>
                             </div>
                           </div>
@@ -622,7 +622,7 @@ export default function Dashboard() {
                             <div className="w-full bg-gray-700/50 rounded-full h-2">
                               <div
                                 className="bg-gradient-to-r from-purple-500 to-purple-400 h-2 rounded-full transition-all duration-500"
-                                style={{ width: ${porcentajeYape}% }}
+                                style={{ width: `${porcentajeYape}%` }}
                               ></div>
                             </div>
                           </div>
