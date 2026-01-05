@@ -241,8 +241,9 @@ export default function PagosPage() {
                         try {
                           const montoRestante = deuda;
 
+                          // TODO: Descomentar cuando se cree la tabla historial_pagos en Supabase
                           // Registrar el pago en historial_pagos
-                          const { error: pagoError } = await supabase
+                          /* const { error: pagoError } = await supabase
                             .from('historial_pagos')
                             .insert([{
                               cliente_id: pago.id,
@@ -255,7 +256,7 @@ export default function PagosPage() {
                             toast.error('Error al registrar el pago');
                             console.error(pagoError);
                             return;
-                          }
+                          } */
 
                           // Actualizar monto_pagado en clientes
                           const { error } = await supabase
@@ -361,7 +362,8 @@ export default function PagosPage() {
                 onClick={async () => {
                   const handleCompletarPago = async (metodoPago: string) => {
                     try {
-                      const { error: pagoError } = await supabase
+                      // TODO: Descomentar cuando se cree la tabla historial_pagos
+                      /* const { error: pagoError } = await supabase
                         .from('historial_pagos')
                         .insert([{
                           cliente_id: selectedPaymentData.id,
@@ -374,7 +376,7 @@ export default function PagosPage() {
                         toast.error('Error al registrar el pago');
                         console.error(pagoError);
                         return;
-                      }
+                      } */
 
                       // Calcular nuevo monto_pagado
                       const { data: cliente } = await supabase
@@ -421,7 +423,8 @@ export default function PagosPage() {
                 onClick={async () => {
                   const handleCompletarPago = async (metodoPago: string) => {
                     try {
-                      const { error: pagoError } = await supabase
+                      // TODO: Descomentar cuando se cree la tabla historial_pagos
+                      /* const { error: pagoError } = await supabase
                         .from('historial_pagos')
                         .insert([{
                           cliente_id: selectedPaymentData.id,
@@ -434,7 +437,7 @@ export default function PagosPage() {
                         toast.error('Error al registrar el pago');
                         console.error(pagoError);
                         return;
-                      }
+                      } */
 
                       const { data: cliente } = await supabase
                         .from('clientes')
