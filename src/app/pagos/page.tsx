@@ -34,6 +34,7 @@ export default function PagosPage() {
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPaymentData, setSelectedPaymentData] = useState<{ id: number, deuda: number, nombre: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadPaymentStats();
@@ -124,6 +125,50 @@ export default function PagosPage() {
       toast.error('Error al cargar estadísticas de pagos');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleProcessPayment = async (metodoPago: string) => {
+    if (!selectedPaymentData || isProcessing) return;
+
+    try {
+      setIsProcessing(true);
+
+      const { error: pagoError } = await supabase
+        .from('historial_pagos')
+        .insert([{
+          cliente_id: selectedPaymentData.id,
+          monto: selectedPaymentData.deuda,
+          metodo_pago: metodoPago,
+          concepto: 'Pago complementario de membresía'
+        }]);
+
+      if (pagoError) throw pagoError;
+
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .select('monto_pagado')
+        .eq('id', selectedPaymentData.id)
+        .single();
+
+      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
+
+      const { error } = await supabase
+        .from('clientes')
+        .update({ monto_pagado: nuevoMonto })
+        .eq('id', selectedPaymentData.id);
+
+      if (error) throw error;
+
+      toast.success('Pago completado exitosamente');
+      setShowPaymentModal(false);
+      setSelectedPaymentData(null);
+      loadPaymentStats();
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al completar el pago');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -337,8 +382,8 @@ export default function PagosPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${pago.metodo_pago === 'yape'
-                              ? 'bg-purple-600/20 text-purple-400 border-purple-600/30'
-                              : 'bg-green-600/20 text-green-400 border-green-600/30'
+                            ? 'bg-purple-600/20 text-purple-400 border-purple-600/30'
+                            : 'bg-green-600/20 text-green-400 border-green-600/30'
                             }`}>
                             {pago.metodo_pago || 'efectivo'}
                           </span>
@@ -369,55 +414,9 @@ export default function PagosPage() {
 
             <div className="space-y-3 mb-6">
               <button
-                onClick={async () => {
-                  const handleCompletarPago = async (metodoPago: string) => {
-                    try {
-                      const { error: pagoError } = await supabase
-                        .from('historial_pagos')
-                        .insert([{
-                          cliente_id: selectedPaymentData.id,
-                          monto: selectedPaymentData.deuda,
-                          metodo_pago: metodoPago,
-                          concepto: 'Pago complementario de membresía'
-                        }]);
-
-                      if (pagoError) {
-                        toast.error('Error al registrar el pago');
-                        console.error(pagoError);
-                        return;
-                      }
-
-                      // Calcular nuevo monto_pagado
-                      const { data: cliente } = await supabase
-                        .from('clientes')
-                        .select('monto_pagado')
-                        .eq('id', selectedPaymentData.id)
-                        .single();
-
-                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
-
-                      const { error } = await supabase
-                        .from('clientes')
-                        .update({ monto_pagado: nuevoMonto })
-                        .eq('id', selectedPaymentData.id);
-
-                      if (error) {
-                        toast.error('Error al completar el pago');
-                        return;
-                      }
-
-                      toast.success('Pago completado exitosamente');
-                      setShowPaymentModal(false);
-                      setSelectedPaymentData(null);
-                      loadPaymentStats();
-                    } catch (error) {
-                      console.error('Error:', error);
-                      toast.error('Error al completar el pago');
-                    }
-                  };
-                  await handleCompletarPago('efectivo');
-                }}
-                className="w-full p-4 rounded-xl border-2 border-green-500 bg-green-500/10 hover:bg-green-500/20 transition-all"
+                onClick={() => handleProcessPayment('efectivo')}
+                disabled={isProcessing}
+                className="w-full p-4 rounded-xl border-2 border-green-500 bg-green-500/10 hover:bg-green-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">💵</span>
@@ -425,58 +424,14 @@ export default function PagosPage() {
                     <p className="text-white font-semibold">Efectivo</p>
                     <p className="text-sm text-gray-400">Pago en efectivo</p>
                   </div>
+                  {isProcessing && <Loader2 className="w-5 h-5 ml-auto animate-spin text-green-500" />}
                 </div>
               </button>
 
               <button
-                onClick={async () => {
-                  const handleCompletarPago = async (metodoPago: string) => {
-                    try {
-                      const { error: pagoError } = await supabase
-                        .from('historial_pagos')
-                        .insert([{
-                          cliente_id: selectedPaymentData.id,
-                          monto: selectedPaymentData.deuda,
-                          metodo_pago: metodoPago,
-                          concepto: 'Pago complementario de membresía'
-                        }]);
-
-                      if (pagoError) {
-                        toast.error('Error al registrar el pago');
-                        console.error(pagoError);
-                        return;
-                      }
-
-                      const { data: cliente } = await supabase
-                        .from('clientes')
-                        .select('monto_pagado')
-                        .eq('id', selectedPaymentData.id)
-                        .single();
-
-                      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
-
-                      const { error } = await supabase
-                        .from('clientes')
-                        .update({ monto_pagado: nuevoMonto })
-                        .eq('id', selectedPaymentData.id);
-
-                      if (error) {
-                        toast.error('Error al completar el pago');
-                        return;
-                      }
-
-                      toast.success('Pago completado exitosamente');
-                      setShowPaymentModal(false);
-                      setSelectedPaymentData(null);
-                      loadPaymentStats();
-                    } catch (error) {
-                      console.error('Error:', error);
-                      toast.error('Error al completar el pago');
-                    }
-                  };
-                  await handleCompletarPago('yape');
-                }}
-                className="w-full p-4 rounded-xl border-2 border-purple-500 bg-purple-500/10 hover:bg-purple-500/20 transition-all"
+                onClick={() => handleProcessPayment('yape')}
+                disabled={isProcessing}
+                className="w-full p-4 rounded-xl border-2 border-purple-500 bg-purple-500/10 hover:bg-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-3xl">📱</span>
@@ -484,16 +439,20 @@ export default function PagosPage() {
                     <p className="text-white font-semibold">Yape</p>
                     <p className="text-sm text-gray-400">Pago digital</p>
                   </div>
+                  {isProcessing && <Loader2 className="w-5 h-5 ml-auto animate-spin text-purple-500" />}
                 </div>
               </button>
             </div>
 
             <button
               onClick={() => {
-                setShowPaymentModal(false);
-                setSelectedPaymentData(null);
+                if (!isProcessing) {
+                  setShowPaymentModal(false);
+                  setSelectedPaymentData(null);
+                }
               }}
-              className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all"
+              disabled={isProcessing}
+              className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancelar
             </button>
