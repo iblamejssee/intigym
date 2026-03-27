@@ -49,6 +49,10 @@ export default function AccesoPage() {
             {
                 fps: 10,
                 qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true,
+                videoConstraints: {
+                    facingMode: 'environment'
+                }
             },
             false
         );

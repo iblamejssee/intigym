@@ -34,6 +34,10 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
+          rememberLastUsedCamera: true,
+          videoConstraints: {
+            facingMode: 'environment'
+          }
         },
         false
       );
