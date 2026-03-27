@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar';
 import { Search, Loader2, CheckCircle, XCircle, QrCode, Keyboard, Camera, UserPlus } from 'lucide-react';
 import { supabase, calcularFechaVencimiento } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
 import RenewMemberModal, { RenewalFormData } from '@/components/RenewMemberModal';
 import AddMemberModal, { MemberFormData } from '@/components/AddMemberModal';
@@ -28,52 +28,76 @@ export default function AccesoPage() {
     const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [notFoundDni, setNotFoundDni] = useState('');
-    const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+    const scannerRef = useRef<Html5Qrcode | null>(null);
+    const isScanningRef = useRef(false);
 
     useEffect(() => {
-        if (activeTab === 'qr' && !scanning) {
-            setScanning(true);
-            initScanner();
+        if (activeTab === 'qr' && !searchResult) {
+            // Small delay to let DOM render the qr-reader div
+            const timeout = setTimeout(() => {
+                startCamera();
+            }, 300);
+            return () => clearTimeout(timeout);
         }
 
         return () => {
-            if (scannerRef.current) {
-                scannerRef.current.clear().catch(console.error);
-            }
+            stopCamera();
         };
-    }, [activeTab]);
+    }, [activeTab, searchResult]);
 
-    const initScanner = () => {
-        const scanner = new Html5QrcodeScanner(
-            'qr-reader',
-            {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                rememberLastUsedCamera: true,
-                videoConstraints: {
-                    facingMode: 'environment'
-                }
-            },
-            false
-        );
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            stopCamera();
+        };
+    }, []);
 
-        scanner.render(onScanSuccess, onScanError);
-        scannerRef.current = scanner;
+    const stopCamera = async () => {
+        if (scannerRef.current && isScanningRef.current) {
+            try {
+                await scannerRef.current.stop();
+                isScanningRef.current = false;
+            } catch (e) {
+                // ignore
+            }
+        }
+    };
+
+    const startCamera = async () => {
+        // Stop any existing instance first
+        await stopCamera();
+
+        const el = document.getElementById('qr-reader');
+        if (!el) return;
+
+        try {
+            if (!scannerRef.current) {
+                scannerRef.current = new Html5Qrcode('qr-reader');
+            }
+
+            await scannerRef.current.start(
+                { facingMode: 'environment' },
+                {
+                    fps: 30,
+                    qrbox: { width: 280, height: 280 },
+                    aspectRatio: 1.0,
+                    disableFlip: false,
+                },
+                onScanSuccess,
+                () => { } // silent error handler
+            );
+            isScanningRef.current = true;
+            setScanning(true);
+        } catch (err) {
+            console.error('Error starting camera:', err);
+            toast.error('No se pudo acceder a la cámara');
+        }
     };
 
     const onScanSuccess = async (decodedText: string) => {
-        if (scannerRef.current) {
-            await scannerRef.current.clear();
-        }
+        await stopCamera();
         setScanning(false);
         await handleValidateAccess(decodedText);
-    };
-
-    const onScanError = (errorMessage: string) => {
-        // Ignorar errores de escaneo continuo
-        if (!errorMessage.includes('NotFoundException')) {
-            // Ignorar errores de escaneo continuo
-        }
     };
 
     const handleValidateAccess = async (dni?: string) => {
@@ -280,10 +304,8 @@ export default function AccesoPage() {
     const handleClear = () => {
         setDniSearch('');
         setSearchResult(null);
-        if (activeTab === 'qr' && !scanning) {
-            setScanning(true);
-            initScanner();
-        }
+        setNotFoundDni('');
+        // Camera will auto-restart via the useEffect when searchResult becomes null
     };
 
     return (
@@ -334,10 +356,7 @@ export default function AccesoPage() {
                                     onClick={() => {
                                         setActiveTab('manual');
                                         setSearchResult(null);
-                                        if (scannerRef.current) {
-                                            scannerRef.current.clear().catch(console.error);
-                                            setScanning(false);
-                                        }
+                                        stopCamera();
                                     }}
                                     className={`py-3 px-6 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'manual'
                                         ? 'bg-[#AB8745] text-white shadow-lg shadow-[#AB8745]/20'
@@ -352,10 +371,17 @@ export default function AccesoPage() {
                             {/* QR Scanner Tab */}
                             {activeTab === 'qr' && !searchResult && (
                                 <div className="mb-6">
-                                    <div id="qr-reader" className="rounded-lg overflow-hidden"></div>
-                                    <p className="text-center text-sm text-gray-400 mt-4">
-                                        Apunta la cámara al código QR del socio
-                                    </p>
+                                    <div id="qr-reader" className="rounded-lg overflow-hidden" style={{ minHeight: 300 }}></div>
+                                    {!scanning && (
+                                        <p className="text-center text-sm text-gray-400 mt-4">
+                                            Iniciando cámara...
+                                        </p>
+                                    )}
+                                    {scanning && (
+                                        <p className="text-center text-sm text-gray-400 mt-4">
+                                            Apunta la cámara al código QR del socio
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
