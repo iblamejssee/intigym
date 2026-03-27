@@ -48,18 +48,25 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
   }, [isOpen, scanning]);
 
   const onScanSuccess = async (decodedText: string) => {
-
     // Detener el scanner
     if (scannerRef.current) {
       await scannerRef.current.clear();
     }
     setScanning(false);
 
-    // Buscar cliente en Supabase por DNI
+    // Buscar cliente en Supabase por DNI con su última matrícula
     try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('nombre, dni, fecha_vencimiento, plan')
+      const { data, error } = await (supabase
+        .from('clientes') as any)
+        .select(`
+          nombres, 
+          apellidos, 
+          dni,
+          matriculas (
+            fecha_vencimiento,
+            planes (nombre)
+          )
+        `)
         .eq('dni', decodedText)
         .single();
 
@@ -67,17 +74,30 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
         // Cliente no encontrado
         setAccessGranted(false);
         setClienteInfo({
-          nombre: 'NO ENCONTRADO',
+          nombre: 'Socio no encontrado',
           dni: decodedText,
           plan: '',
         });
         return;
       }
 
-      // Cliente encontrado - verificar si está vencido
-      const vencido = estaVencido(data.fecha_vencimiento);
+      // Obtener la matrícula más reciente
+      const matriculas = data.matriculas || [];
+      const ultimaMatricula = matriculas.length > 0
+        ? [...matriculas].sort((a: any, b: any) => new Date(b.created_at || b.fecha_inicio).getTime() - new Date(a.created_at || a.fecha_inicio).getTime())[0]
+        : null;
+
+      const fechaVenc = (ultimaMatricula as any)?.fecha_vencimiento;
+      const vencido = estaVencido(fechaVenc);
+
       setAccessGranted(!vencido);
-      setClienteInfo(data);
+
+      setClienteInfo({
+        nombre: `${data.nombres} ${data.apellidos}`,
+        dni: data.dni,
+        plan: (ultimaMatricula as any)?.planes?.nombre || 'Sin Plan',
+        fecha_vencimiento: fechaVenc
+      });
 
       // Notificar al componente padre
       onScan(decodedText);
@@ -85,7 +105,7 @@ export default function QRScannerModal({ isOpen, onClose, onScan }: QRScannerMod
       console.error('Error al buscar cliente:', error);
       setAccessGranted(false);
       setClienteInfo({
-        nombre: 'ERROR',
+        nombre: 'Error en la búsqueda',
         dni: decodedText,
         plan: '',
       });
