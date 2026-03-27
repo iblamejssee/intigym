@@ -48,7 +48,7 @@ export default function ConfiguracionPage() {
 
       if (data && data.length > 0) {
         setPlanes(data);
-        setOriginalPlanIds(data.map(p => p.id as number));
+        setOriginalPlanIds(data.map((p: any) => p.id as number));
       } else {
         // Valores por defecto si no hay datos
         const defaultPlanes = [
@@ -100,7 +100,7 @@ export default function ConfiguracionPage() {
       }
 
       // 1. Identificar planes para eliminar
-      const currentIds = planesValidos.filter(p => p.id).map(p => p.id as number);
+      const currentIds = planesValidos.filter((p: any) => p.id).map((p: any) => p.id as number);
       const idsToDelete = originalPlanIds.filter(id => !currentIds.includes(id));
 
       if (idsToDelete.length > 0) {
