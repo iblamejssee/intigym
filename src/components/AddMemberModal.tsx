@@ -13,33 +13,37 @@ interface AddMemberModalProps {
 }
 
 export interface MemberFormData {
-  nombre: string;
+  nombres: string;
+  apellidos: string;
   dni: string;
   telefono: string;
   email: string;
   fechaNacimiento: string;
-  plan: string;
+  planId: number | '';
   fechaInicio: string;
   montoPagado: number;
-  metodoPago: string;
+  metodoPago: 'efectivo' | 'yape' | 'plin' | 'transferencia';
   foto: File | null;
 }
 
 interface PlanOption {
+  id: number;
   nombre: string;
-  precio: number;
+  precio_base: number;
+  duracion_dias: number;
 }
 
 export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberModalProps) {
   const [activeStep, setActiveStep] = useState<'personal' | 'plan' | 'foto'>('personal');
   const [formData, setFormData] = useState<MemberFormData>({
-    nombre: '',
+    nombres: '',
+    apellidos: '',
     dni: '',
     telefono: '',
     email: '',
     fechaNacimiento: '',
-    plan: '',
-    fechaInicio: '',
+    planId: '',
+    fechaInicio: new Date().toISOString().split('T')[0],
     montoPagado: 0,
     metodoPago: 'efectivo',
     foto: null,
@@ -58,27 +62,22 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
   const loadPlanes = async () => {
     try {
       const { data, error } = await supabase
-        .from('configuracion')
-        .select('clave, valor')
-        .like('clave', 'precio_%')
-        .order('valor');
+        .from('planes')
+        .select('*')
+        .order('nombre');
 
       if (error) {
         console.error('Error al cargar planes:', error);
-        toast.error('Error al cargar planes de configuración');
+        toast.error('Error al cargar planes de la base de datos');
         return;
       }
 
       if (!data || data.length === 0) {
-        toast.warning('No hay planes configurados. Por favor, configura los planes primero.');
+        toast.warning('No hay planes configurados. Por favor, agrega planes a la base de datos.');
         return;
       }
 
-      const planesData = data.map(item => ({
-        nombre: item.clave.replace('precio_', ''),
-        precio: parseFloat(item.valor),
-      }));
-      setPlanes(planesData);
+      setPlanes(data);
     } catch (error) {
       console.error('Error al cargar planes:', error);
       toast.error('Error al cargar planes');
@@ -91,12 +90,13 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
     const { name, value } = e.target;
 
     // Si cambia el plan, actualizar automáticamente el monto pagado
-    if (name === 'plan') {
-      const planSeleccionado = planes.find(p => p.nombre === value);
+    if (name === 'planId') {
+      const planId = value === '' ? '' : parseInt(value);
+      const planSeleccionado = planes.find(p => p.id === planId);
       setFormData(prev => ({
         ...prev,
-        [name]: value,
-        montoPagado: planSeleccionado?.precio || 0
+        [name]: planId,
+        montoPagado: planSeleccionado?.precio_base || 0
       }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -147,35 +147,41 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
     } else if (activeStep === 'plan') {
       setActiveStep('foto');
     } else {
-      onSubmit(formData);
-      // Reset form
-      setFormData({
-        nombre: '',
-        dni: '',
-        telefono: '',
-        email: '',
-        fechaNacimiento: '',
-        plan: '',
-        fechaInicio: '',
-        montoPagado: 0,
-        metodoPago: 'efectivo',
-        foto: null,
-      });
-      setPreview(null);
-      setActiveStep('personal');
-      onClose();
+      handleFinalSubmit();
     }
   };
 
-  const handleClose = () => {
+  const handleFinalSubmit = () => {
+    onSubmit(formData);
+    // Reset form
     setFormData({
-      nombre: '',
+      nombres: '',
+      apellidos: '',
       dni: '',
       telefono: '',
       email: '',
       fechaNacimiento: '',
-      plan: '',
-      fechaInicio: '',
+      planId: '',
+      fechaInicio: new Date().toISOString().split('T')[0],
+      montoPagado: 0,
+      metodoPago: 'efectivo',
+      foto: null,
+    });
+    setPreview(null);
+    setActiveStep('personal');
+    onClose();
+  };
+
+  const handleClose = () => {
+    setFormData({
+      nombres: '',
+      apellidos: '',
+      dni: '',
+      telefono: '',
+      email: '',
+      fechaNacimiento: '',
+      planId: '',
+      fechaInicio: new Date().toISOString().split('T')[0],
       montoPagado: 0,
       metodoPago: 'efectivo',
       foto: null,
@@ -186,13 +192,13 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
-      <div className="bg-[#0a0a0a]/95 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-0 sm:p-4 animate-in fade-in duration-300">
+      <div className="bg-[#0a0a0a]/95 backdrop-blur-xl border border-[#AB8745]/20 rounded-none sm:rounded-2xl shadow-2xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
         {/* Header */}
-        <div className="p-6 border-b border-[#AB8745]/20 flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur-xl">
+        <div className="p-5 md:p-6 border-b border-[#AB8745]/20 flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur-xl z-10">
           <div>
-            <h3 className="text-2xl font-bold text-white">Nuevo Socio</h3>
-            <p className="text-sm text-gray-400 mt-1">
+            <h3 className="text-xl md:text-2xl font-bold text-white">Nuevo Socio</h3>
+            <p className="text-[10px] md:text-sm text-gray-400 mt-1 uppercase tracking-widest font-bold">
               {activeStep === 'personal' && 'Datos Personales'}
               {activeStep === 'plan' && 'Plan de Entrenamiento'}
               {activeStep === 'foto' && 'Foto de Perfil'}
@@ -200,20 +206,21 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
           </div>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-lg"
+            className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full border border-white/5"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+        drum
 
         {/* Progress Steps */}
-        <div className="px-6 py-4 border-b border-[#AB8745]/20">
+        <div className="px-4 sm:px-6 py-4 border-b border-[#AB8745]/20 bg-white/5 sm:bg-transparent">
           <div className="flex items-center justify-between">
             {['personal', 'plan', 'foto'].map((step, index) => (
               <div key={step} className="flex items-center flex-1">
                 <div className="flex flex-col items-center flex-1">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${activeStep === step
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border-2 transition-all text-xs sm:text-base ${activeStep === step
                       ? 'bg-[#AB8745] border-[#AB8745] text-white'
                       : activeStep === 'plan' && step === 'personal'
                         ? 'bg-[#AB8745]/20 border-[#AB8745]/50 text-[#D4A865]'
@@ -224,11 +231,11 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                   >
                     {index + 1}
                   </div>
-                  <span className="text-xs mt-2 text-gray-400 capitalize">{step}</span>
+                  <span className="text-[10px] sm:text-xs mt-1 sm:mt-2 text-gray-400 capitalize font-bold">{step}</span>
                 </div>
                 {index < 2 && (
                   <div
-                    className={`h-0.5 flex-1 mx-2 transition-all ${activeStep === 'plan' && step === 'personal'
+                    className={`h-0.5 flex-1 mx-1 sm:mx-2 transition-all ${activeStep === 'plan' && step === 'personal'
                       ? 'bg-[#AB8745]'
                       : activeStep === 'foto'
                         ? 'bg-[#AB8745]'
@@ -246,46 +253,62 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
           {/* Datos Personales */}
           {activeStep === 'personal' && (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre Completo *
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
-                  <input
-                    type="text"
-                    name="nombre"
-                    value={formData.nombre}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
-                    placeholder="Ej: Juan Pérez"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                    Nombres
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#AB8745]" />
+                    <input
+                      type="text"
+                      name="nombres"
+                      value={formData.nombres}
+                      onChange={handleChange}
+                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-[#AB8745]/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] transition-all font-bold"
+                      placeholder="Ej: Juan"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">
+                    Apellidos
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#AB8745]" />
+                    <input
+                      type="text"
+                      name="apellidos"
+                      value={formData.apellidos}
+                      onChange={handleChange}
+                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-[#AB8745]/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] transition-all font-bold"
+                      placeholder="Ej: Pérez"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">DNI *</label>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">DNI</label>
                   <input
                     type="text"
                     name="dni"
                     value={formData.dni}
                     onChange={handleChange}
-                    required
                     maxLength={8}
-                    className="w-full px-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
+                    className="w-full px-4 py-3 bg-white/5 border border-[#AB8745]/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] transition-all font-bold"
                     placeholder="12345678"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Teléfono</label>
+                  <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">Teléfono</label>
                   <input
                     type="tel"
                     name="telefono"
                     value={formData.telefono}
                     onChange={handleChange}
-                    className="w-full px-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
+                    className="w-full px-4 py-3 bg-white/5 border border-[#AB8745]/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] transition-all font-bold"
                     placeholder="999 999 999"
                   />
                 </div>
@@ -325,24 +348,24 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
           {activeStep === 'plan' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Plan *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Plan</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <select
-                    name="plan"
-                    value={formData.plan}
+                    name="planId"
+                    value={formData.planId}
                     onChange={handleChange}
-                    required
+
                     className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
                   >
                     <option value="" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>Selecciona un plan</option>
                     {planes.map((plan) => (
                       <option
-                        key={plan.nombre}
-                        value={plan.nombre}
+                        key={plan.id}
+                        value={plan.id}
                         style={{ backgroundColor: '#1a1a1a', color: 'white' }}
                       >
-                        {plan.nombre.charAt(0).toUpperCase() + plan.nombre.slice(1)} - S/ {plan.precio.toLocaleString()}
+                        {plan.nombre} - S/ {plan.precio_base.toLocaleString()}
                       </option>
                     ))}
                   </select>
@@ -350,7 +373,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Monto Pagado *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Monto Pagado</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
@@ -358,17 +381,17 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                     name="montoPagado"
                     value={formData.montoPagado}
                     onChange={handleChange}
-                    required
+
                     min="0"
                     step="0.01"
                     className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
                     placeholder="120.00"
                   />
                 </div>
-                {formData.plan && (() => {
-                  const planSeleccionado = planes.find(p => p.nombre === formData.plan);
+                {formData.planId && (() => {
+                  const planSeleccionado = planes.find(p => p.id === formData.planId);
                   if (planSeleccionado) {
-                    const deuda = planSeleccionado.precio - formData.montoPagado;
+                    const deuda = planSeleccionado.precio_base - formData.montoPagado;
                     if (deuda > 0) {
                       return (
                         <p className="text-sm text-yellow-400 mt-2 font-semibold">
@@ -394,21 +417,23 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Método de Pago *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Método de Pago</label>
                 <select
                   name="metodoPago"
                   value={formData.metodoPago}
                   onChange={handleChange}
-                  required
+
                   className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
                 >
                   <option value="efectivo" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>💵 Efectivo</option>
                   <option value="yape" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>📱 Yape</option>
+                  <option value="plin" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>📱 Plin</option>
+                  <option value="transferencia" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>💳 Transferencia</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Fecha de Inicio *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Fecha de Inicio</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
@@ -416,7 +441,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                     name="fechaInicio"
                     value={formData.fechaInicio}
                     onChange={handleChange}
-                    required
+
                     className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
                   />
                 </div>
@@ -482,7 +507,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
           )}
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-[#AB8745]/20">
+          <div className="flex flex-col sm:flex-row gap-3 pt-6 md:pt-4 border-t border-[#AB8745]/20 pb-10 sm:pb-0">
             {activeStep !== 'personal' && (
               <button
                 type="button"
@@ -490,7 +515,7 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
                   if (activeStep === 'foto') setActiveStep('plan');
                   else if (activeStep === 'plan') setActiveStep('personal');
                 }}
-                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg font-semibold transition-all border border-[#AB8745]/20"
+                className="w-full sm:flex-1 px-4 py-4 sm:py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-all border border-[#AB8745]/20"
               >
                 Atrás
               </button>
@@ -498,17 +523,18 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-lg font-semibold transition-all border border-[#AB8745]/20"
+              className="w-full sm:flex-1 px-4 py-4 sm:py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-all border border-[#AB8745]/20"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-red-800 text-white rounded-lg font-semibold transition-all shadow-lg shadow-[#AB8745]/20"
+              className="w-full sm:flex-1 px-4 py-4 sm:py-2.5 bg-linear-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-red-800 text-white rounded-xl font-black text-lg transition-all shadow-lg shadow-[#AB8745]/20"
             >
               {activeStep === 'foto' ? 'Registrar Socio' : 'Siguiente'}
             </button>
           </div>
+          drum
         </form>
       </div>
     </div>

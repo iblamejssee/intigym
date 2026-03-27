@@ -2,31 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { CreditCard, DollarSign, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
-import { supabase, cargarPreciosPlanes } from '@/lib/supabase';
+import { CreditCard, DollarSign, AlertCircle, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface PaymentStats {
   totalMes: number;
   pendientes: number;
-  vencidos: number;
+  deudores: number;
 }
 
 interface PaymentHistory {
-  id: number;
+  id: string;
   nombre: string;
   dni: string;
   plan: string;
   monto_pagado: number;
-  created_at: string;
-  fecha_vencimiento: string;
+  metodo_pago: string;
+  fecha_pago: string;
 }
 
 export default function PagosPage() {
   const [stats, setStats] = useState<PaymentStats>({
     totalMes: 0,
     pendientes: 0,
-    vencidos: 0,
+    deudores: 0,
   });
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [debtors, setDebtors] = useState<any[]>([]);
@@ -57,69 +57,71 @@ export default function PagosPage() {
   const loadPaymentStats = async () => {
     try {
       setLoading(true);
-      const hoy = new Date().toISOString().split('T')[0];
       const inicioMes = new Date();
       inicioMes.setDate(1);
-      const inicioMesStr = inicioMes.toISOString().split('T')[0];
+      inicioMes.setHours(0, 0, 0, 0);
+      const inicioMesStr = inicioMes.toISOString();
 
-      // Cargar precios de planes
-      const preciosPlanes = await cargarPreciosPlanes();
-      setPlanPrices(preciosPlanes);
-
-      // 1. Total del Mes: Suma de historial_pagos del mes actual
-      const { data: pagosMes } = await supabase
-        .from('historial_pagos')
-        .select('monto')
-        .gte('created_at', inicioMesStr);
-
-      const totalMes = pagosMes?.reduce((sum, pago) => sum + (pago.monto || 0), 0) || 0;
-
-      // 2. Pendientes y Vencidos (mismo lógica basada en clientes)
-      const { count: pendientesCount } = await supabase
-        .from('clientes')
-        .select('*', { count: 'exact', head: true })
-        .lt('fecha_vencimiento', hoy);
-
-      // 3. Deudores: Clientes con deuda (monto_pagado < precio_plan)
-      const { data: clientesActivos } = await supabase
-        .from('clientes')
-        .select('id, nombre, dni, plan, monto_pagado, created_at, fecha_vencimiento')
-        .order('created_at', { ascending: false });
-
-      const deudoresList = clientesActivos?.filter(cliente => {
-        const precio = preciosPlanes[cliente.plan] || 0;
-        const apagado = cliente.monto_pagado || 0;
-        return apagado < precio; // Solo mostrar si deben algo
-      }) || [];
-
-      // 4. Historial de Pagos: Fetch directo de historial_pagos con join a clientes
-      const { data: historial, error: historyError } = await supabase
-        .from('historial_pagos')
-        .select(`
+      // Ejecutar todas las consultas en paralelo para máximo rendimiento
+      const [pagoRes, vencidoRes, matriculaRes, historialRes] = await Promise.all([
+        (supabase.from('pagos') as any).select('monto_pagado').gte('fecha_pago', inicioMesStr),
+        (supabase.from('matriculas') as any).select('*', { count: 'exact', head: true }).eq('estado', 'vencido'),
+        (supabase.from('matriculas') as any).select(`
           id,
-          monto,
+          monto_total,
+          planes (nombre),
+          clientes (id, nombres, apellidos, dni),
+          pagos (monto_pagado)
+        `).in('estado', ['activo', 'vencido']).order('created_at', { ascending: false }).limit(100),
+        (supabase.from('pagos') as any).select(`
+          id,
+          monto_pagado,
           metodo_pago,
-          concepto,
-          created_at,
-          clientes (
-            nombre,
-            dni,
-            plan
+          fecha_pago,
+          matriculas (
+            planes (nombre),
+            clientes (nombres, apellidos, dni)
           )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
+        `).order('fecha_pago', { ascending: false }).limit(50)
+      ]);
 
-      if (historyError) throw historyError;
+      if (pagoRes.error) throw pagoRes.error;
+      if (vencidoRes.error) throw vencidoRes.error;
+      if (matriculaRes.error) throw matriculaRes.error;
+      if (historialRes.error) throw historialRes.error;
+
+      // 1. Calcular total del mes
+      const totalMes = pagoRes.data?.reduce((sum: number, pago: any) => sum + (pago.monto_pagado || 0), 0) || 0;
+
+      // 2. Procesar deudores
+      const deudoresList: any[] = [];
+      if (matriculaRes.data) {
+        matriculaRes.data.forEach((m: any) => {
+          const pagado = m.pagos?.reduce((sum: number, p: any) => sum + (p.monto_pagado || 0), 0) || 0;
+          const deuda = m.monto_total - pagado;
+          if (deuda > 0) {
+            deudoresList.push({
+              id: m.id,
+              cliente_id: m.clientes.id,
+              nombre: `${m.clientes.nombres} ${m.clientes.apellidos}`,
+              dni: m.clientes.dni,
+              plan: m.planes?.nombre || 'Personalizado',
+              monto_pagado: pagado,
+              monto_total: m.monto_total,
+              deuda
+            });
+          }
+        });
+      }
 
       setStats({
         totalMes,
-        pendientes: pendientesCount || 0,
-        vencidos: pendientesCount || 0,
+        pendientes: vencidoRes.count || 0,
+        deudores: deudoresList.length,
       });
 
       setDebtors(deudoresList);
-      setPaymentHistory(historial || []);
+      setPaymentHistory(historialRes.data || []);
     } catch (error) {
       console.error('Error al cargar estadísticas de pagos:', error);
       toast.error('Error al cargar estadísticas de pagos');
@@ -134,31 +136,16 @@ export default function PagosPage() {
     try {
       setIsProcessing(true);
 
-      const { error: pagoError } = await supabase
-        .from('historial_pagos')
+      const { error: pagoError } = await (supabase
+        .from('pagos') as any)
         .insert([{
-          cliente_id: selectedPaymentData.id,
-          monto: selectedPaymentData.deuda,
+          matricula_id: selectedPaymentData.id, // El ID guardado en deudoresList es el de la matrícula
+          monto_pagado: selectedPaymentData.deuda,
           metodo_pago: metodoPago,
-          concepto: 'Pago complementario de membresía'
+          fecha_pago: new Date().toISOString()
         }]);
 
       if (pagoError) throw pagoError;
-
-      const { data: cliente } = await supabase
-        .from('clientes')
-        .select('monto_pagado')
-        .eq('id', selectedPaymentData.id)
-        .single();
-
-      const nuevoMonto = (cliente?.monto_pagado || 0) + selectedPaymentData.deuda;
-
-      const { error } = await supabase
-        .from('clientes')
-        .update({ monto_pagado: nuevoMonto })
-        .eq('id', selectedPaymentData.id);
-
-      if (error) throw error;
 
       toast.success('Pago completado exitosamente');
       setShowPaymentModal(false);
@@ -177,13 +164,35 @@ export default function PagosPage() {
     toast.success('Datos actualizados');
   };
 
+  const handleDeletePago = async (pagoId: string) => {
+    if (!window.confirm('¿Estás seguro de eliminar este pago? Esta acción no se puede deshacer.')) return;
+
+    try {
+      setIsProcessing(true);
+      const { error } = await (supabase
+        .from('pagos') as any)
+        .delete()
+        .eq('id', pagoId);
+
+      if (error) throw error;
+
+      toast.success('Pago eliminado correctamente');
+      loadPaymentStats();
+    } catch (error) {
+      console.error('Error al eliminar pago:', error);
+      toast.error('Error al eliminar el pago');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
       <Sidebar />
 
       <main className="flex-1 overflow-y-auto bg-[#0a0a0a]">
-        <div className="p-6 md:p-8">
-          <div className="mb-8 flex items-center justify-between">
+        <div className="p-4 md:p-8">
+          <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <h2 className="text-3xl font-bold text-white mb-2">Pagos</h2>
               <p className="text-gray-400">Gestión de pagos y flujo de caja</p>
@@ -191,53 +200,53 @@ export default function PagosPage() {
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="flex items-center space-x-2 px-4 py-2 bg-[#AB8745]/20 hover:bg-[#AB8745]/30 border border-[#AB8745]/30 rounded-lg text-[#D4A865] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center space-x-2 px-6 py-3 bg-[#AB8745]/20 hover:bg-[#AB8745]/30 border border-[#AB8745]/30 rounded-xl text-[#D4A865] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              <span>Actualizar</span>
+              <span className="font-bold">Actualizar Datos</span>
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
+            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-5 md:p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-600/20 rounded-xl flex items-center justify-center border border-green-600/30 group-hover:bg-green-600/30 transition-all">
-                  <DollarSign className="w-6 h-6 text-green-400" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-green-600/20 rounded-xl flex items-center justify-center border border-green-600/30 group-hover:bg-green-600/30 transition-all">
+                  <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-green-400" />
                 </div>
                 {loading ? (
-                  <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 text-green-400 animate-spin" />
                 ) : (
-                  <span className="text-3xl font-bold text-green-400">S/ {stats.totalMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="text-2xl md:text-3xl font-bold text-green-400">S/ {stats.totalMes.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                 )}
               </div>
               <h3 className="text-gray-300 font-semibold mb-1">Total del Mes</h3>
               <p className="text-sm text-gray-500">Ingresos reales (Enero)</p>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
+            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-5 md:p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-yellow-600/20 rounded-xl flex items-center justify-center border border-yellow-600/30 group-hover:bg-yellow-600/30 transition-all">
-                  <AlertCircle className="w-6 h-6 text-yellow-400" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-yellow-600/20 rounded-xl flex items-center justify-center border border-yellow-600/30 group-hover:bg-yellow-600/30 transition-all">
+                  <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-yellow-400" />
                 </div>
                 {loading ? (
-                  <Loader2 className="w-8 h-8 text-yellow-400 animate-spin" />
+                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 text-yellow-400 animate-spin" />
                 ) : (
-                  <span className="text-3xl font-bold text-yellow-400">{stats.pendientes}</span>
+                  <span className="text-2xl md:text-3xl font-bold text-yellow-400">{stats.pendientes}</span>
                 )}
               </div>
               <h3 className="text-gray-300 font-semibold mb-1">Membresías Vencidas</h3>
               <p className="text-sm text-gray-500">Requieren renovación</p>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
+            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-5 md:p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-[#AB8745]/20 rounded-xl flex items-center justify-center border border-[#AB8745]/30 group-hover:bg-[#AB8745]/30 transition-all">
-                  <CreditCard className="w-6 h-6 text-[#D4A865]" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-[#AB8745]/20 rounded-xl flex items-center justify-center border border-[#AB8745]/30 group-hover:bg-[#AB8745]/30 transition-all">
+                  <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-[#D4A865]" />
                 </div>
                 {loading ? (
-                  <Loader2 className="w-8 h-8 text-[#D4A865] animate-spin" />
+                  <Loader2 className="w-6 h-6 md:w-8 md:h-8 text-[#D4A865] animate-spin" />
                 ) : (
-                  <span className="text-3xl font-bold text-[#D4A865]">{stats.vencidos}</span>
+                  <span className="text-2xl md:text-3xl font-bold text-[#D4A865]">{stats.deudores}</span>
                 )}
               </div>
               <h3 className="text-gray-300 font-semibold mb-1">Total Debts</h3>
@@ -272,24 +281,21 @@ export default function PagosPage() {
                 <p className="text-gray-500 text-sm mt-1">Todos los clientes están al día con sus pagos.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-white/5 border-b border-yellow-500/10">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Pagado</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Deuda</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-yellow-500/10">
-                    {debtors.map((cliente) => {
-                      const precioPlan = planPrices[cliente.plan] || 0;
-                      const montoPagado = cliente.monto_pagado || 0;
-                      const deuda = precioPlan - montoPagado;
-
-                      return (
+              <>
+                {/* Vista Desktop (Tabla) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-white/5 border-b border-yellow-500/10">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Plan</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Pagado</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Deuda</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-yellow-500/10">
+                      {debtors.map((cliente) => (
                         <tr key={cliente.id} className="hover:bg-white/5 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>
@@ -301,28 +307,68 @@ export default function PagosPage() {
                             <span className="capitalize text-sm text-gray-300">{cliente.plan}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-gray-400">S/ {montoPagado.toFixed(2)}</span>
+                            <span className="text-sm text-gray-400">S/ {cliente.monto_pagado.toFixed(2)}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm font-bold text-yellow-400">S/ {deuda.toFixed(2)}</span>
+                            <span className="text-sm font-bold text-yellow-400">S/ {cliente.deuda.toFixed(2)}</span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <button
                               onClick={() => {
-                                setSelectedPaymentData({ id: cliente.id, deuda, nombre: cliente.nombre });
+                                setSelectedPaymentData({ id: cliente.id, deuda: cliente.deuda, nombre: cliente.nombre });
                                 setShowPaymentModal(true);
                               }}
-                              className="px-3 py-1.5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
+                              className="px-3 py-1.5 bg-linear-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white text-xs font-semibold rounded-lg transition-all duration-200 hover:scale-105 shadow-lg shadow-green-500/20"
                             >
                               Completar Pago
                             </button>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Vista Mobile (Tarjetas) */}
+                <div className="md:hidden divide-y divide-yellow-500/10">
+                  {debtors.map((cliente) => (
+                    <div key={cliente.id} className="p-5 flex flex-col gap-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-bold text-white text-lg leading-tight">{cliente.nombre}</h4>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-500">DNI: {cliente.dni}</span>
+                            <span className="w-1 h-1 rounded-full bg-gray-700"></span>
+                            <span className="text-xs text-yellow-400 font-bold uppercase">{cliente.plan}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                          <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mb-1">Pagado</p>
+                          <p className="text-sm font-bold text-gray-300">S/ {cliente.monto_pagado.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-yellow-500/10 rounded-xl p-3 border border-yellow-500/20">
+                          <p className="text-[10px] text-yellow-500/70 uppercase font-black tracking-widest mb-1">Deuda</p>
+                          <p className="text-sm font-black text-yellow-400">S/ {cliente.deuda.toFixed(2)}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setSelectedPaymentData({ id: cliente.id, deuda: cliente.deuda, nombre: cliente.nombre });
+                          setShowPaymentModal(true);
+                        }}
+                        className="w-full py-3 bg-linear-to-r from-green-600 to-green-500 text-white font-bold rounded-xl shadow-lg shadow-green-600/20 flex items-center justify-center gap-2"
+                      >
+                        <DollarSign className="w-5 h-5" />
+                        Completar Pago Ahora
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
@@ -342,60 +388,118 @@ export default function PagosPage() {
                 <p className="text-gray-400">No hay pagos registrados</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-white/5 border-b border-[#AB8745]/20">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Concepto</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Método</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#AB8745]/10">
-                    {paymentHistory.map((pago) => (
-                      <tr key={pago.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-300 font-medium">
-                            {new Date(pago.created_at).toLocaleDateString('es-ES', {
+              <>
+                {/* Vista Desktop (Tabla) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-white/5 border-b border-[#AB8745]/20">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Concepto</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Método</th>
+                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Monto</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#AB8745]/10">
+                      {paymentHistory.map((pago) => (
+                        <tr key={pago.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-300 font-medium">
+                              {new Date(pago.fecha_pago).toLocaleDateString('es-ES', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {pago.matriculas?.clientes ? (
+                              <div>
+                                <div className="text-sm font-medium text-white">
+                                  {pago.matriculas.clientes.nombres} {pago.matriculas.clientes.apellidos}
+                                </div>
+                                <div className="text-xs text-gray-400">DNI: {pago.matriculas.clientes.dni}</div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-red-400">Información no disponible</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-300">
+                              {pago.matriculas?.planes?.nombre || 'Pago membresía'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${pago.metodo_pago === 'yape'
+                              ? 'bg-purple-600/20 text-purple-400 border-purple-600/30'
+                              : 'bg-green-600/20 text-green-400 border-green-600/30'
+                              }`}>
+                              {pago.metodo_pago || 'efectivo'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-bold text-[#D4A865]">S/ {pago.monto_pagado.toFixed(2)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <button
+                              onClick={() => handleDeletePago(pago.id)}
+                              className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                              title="Eliminar Pago"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Vista Mobile (Tarjetas) */}
+                <div className="md:hidden divide-y divide-[#AB8745]/10">
+                  {paymentHistory.map((pago) => (
+                    <div key={pago.id} className="p-5">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest leading-none mb-1">
+                            {new Date(pago.fecha_pago).toLocaleDateString('es-ES', {
                               day: '2-digit',
                               month: 'short',
-                              year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {pago.clientes ? (
-                            <div>
-                              <div className="text-sm font-medium text-white">{pago.clientes.nombre}</div>
-                              <div className="text-xs text-gray-400">DNI: {pago.clientes.dni}</div>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-red-400">Cliente Eliminado</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-300">{pago.concepto || 'Pago de membresía'}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${pago.metodo_pago === 'yape'
-                            ? 'bg-purple-600/20 text-purple-400 border-purple-600/30'
-                            : 'bg-green-600/20 text-green-400 border-green-600/30'
-                            }`}>
-                            {pago.metodo_pago || 'efectivo'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-bold text-[#D4A865]">S/ {pago.monto.toFixed(2)}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          </p>
+                          <h4 className="font-bold text-white text-sm">
+                            {pago.matriculas?.clientes?.nombres} {pago.matriculas?.clientes?.apellidos}
+                          </h4>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border capitalize ${pago.metodo_pago === 'yape' ? 'bg-purple-600/20 text-purple-400 border-purple-600/30' : 'bg-green-600/20 text-green-400 border-green-600/30'}`}>
+                          {pago.metodo_pago || 'efectivo'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-gray-400">
+                          {pago.matriculas?.planes?.nombre || 'Pago membresía'}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-black text-[#D4A865]">S/ {pago.monto_pagado.toFixed(2)}</span>
+                          <button
+                            onClick={() => handleDeletePago(pago.id)}
+                            className="p-2 bg-red-600/10 text-red-400 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -5,712 +5,276 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import AddMemberModal, { MemberFormData } from '@/components/AddMemberModal';
 import MemberSuccessModal from '@/components/MemberSuccessModal';
-import { Users, CreditCard, DollarSign, Plus, Loader2, QrCode, Search, CheckCircle, XCircle, AlertTriangle, Clock } from 'lucide-react';
-import { supabase, cargarPreciosPlanes, calcularFechaVencimiento } from '@/lib/supabase';
+import {
+  Users,
+  Plus,
+  QrCode,
+  Search,
+  ShieldCheck,
+  ChevronRight,
+  Sparkles,
+  LayoutDashboard,
+  Clock
+} from 'lucide-react';
+import { supabase, calcularFechaVencimiento } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { getDaysUntilExpiration, isExpiringSoon, getExpirationAlertColor } from '@/lib/utils';
-import WhatsAppButton from '@/components/WhatsAppButton';
+import { motion } from 'framer-motion';
 
-interface DashboardStats {
-  totalSocios: number;
-  pagosPendientes: number;
-  ingresosMes: number;
-  ingresosPorMetodo: {
-    efectivo: number;
-    yape: number;
-  };
-}
-
-interface ExpiringMember {
-  id: number;
-  nombre: string;
-  telefono: string;
-  plan: string;
-  fecha_vencimiento: string;
-  dias_restantes: number;
-}
-
-interface MonthlyRevenue {
-  mes: string; // 'YYYY-MM'
-  mesNombre: string; // 'Enero 2026'
-  efectivo: number;
-  yape: number;
-  total: number;
-}
-
-export default function Dashboard() {
+export default function WelcomeLounge() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [newMemberData, setNewMemberData] = useState<MemberFormData | null>(null);
-  const [dniSearch, setDniSearch] = useState('');
-  const [searchResult, setSearchResult] = useState<{ nombre: string; plan: string; vencido: boolean } | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalSocios: 0,
-    pagosPendientes: 0,
-    ingresosMes: 0,
-    ingresosPorMetodo: {
-      efectivo: 0,
-      yape: 0,
-    },
-  });
-  const [expiringMembers, setExpiringMembers] = useState<ExpiringMember[]>([]);
-  const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenue[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [time, setTime] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
-    loadStats();
+    setTime(new Date().toLocaleTimeString('es-PE'));
+    const timer = setInterval(() => {
+      setTime(new Date().toLocaleTimeString('es-PE'));
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
-
-  const loadStats = async () => {
-    try {
-      setLoading(true);
-      const hoy = new Date().toISOString().split('T')[0];
-      const inicioMes = new Date();
-      inicioMes.setDate(1);
-      const inicioMesStr = inicioMes.toISOString().split('T')[0];
-
-      // Cargar precios desde configuración
-      const planPrices = await cargarPreciosPlanes();
-
-      // Total Socios
-      const { count: totalCount } = await supabase
-        .from('clientes')
-        .select('*', { count: 'exact', head: true });
-
-      // Pagos Pendientes (fecha_vencimiento < hoy)
-      const { count: pendientesCount } = await supabase
-        .from('clientes')
-        .select('*', { count: 'exact', head: true })
-        .lt('fecha_vencimiento', hoy);
-
-      // Ingresos del Mes - Calcular desde historial_pagos
-      const { data: pagosMes } = await supabase
-        .from('historial_pagos')
-        .select('monto, metodo_pago, created_at')
-        .gte('created_at', inicioMesStr);
-
-      let ingresos = 0;
-      const ingresosPorMetodo = {
-        efectivo: 0,
-        yape: 0,
-      };
-
-      if (pagosMes) {
-        pagosMes.forEach(pago => {
-          ingresos += pago.monto || 0;
-
-          // Acumular por método de pago
-          const metodo = pago.metodo_pago || 'efectivo';
-          if (metodo in ingresosPorMetodo) {
-            ingresosPorMetodo[metodo as keyof typeof ingresosPorMetodo] += (pago.monto || 0);
-          }
-        });
-      }
-
-      setStats({
-        totalSocios: totalCount || 0,
-        pagosPendientes: pendientesCount || 0,
-        ingresosMes: ingresos,
-        ingresosPorMetodo,
-      });
-
-      // Cargar socios próximos a vencer
-      await loadExpiringMembers();
-      await loadMonthlyRevenue();
-    } catch (error) {
-      console.error('Error al cargar estadísticas:', error);
-      toast.error('Error al cargar estadísticas del dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadExpiringMembers = async () => {
-    try {
-      const hoy = new Date();
-      const en5Dias = new Date();
-      en5Dias.setDate(hoy.getDate() + 5);
-
-      const { data: clientes, error } = await supabase
-        .from('clientes')
-        .select('id, nombre, telefono, plan, fecha_vencimiento')
-        .gte('fecha_vencimiento', hoy.toISOString().split('T')[0])
-        .lte('fecha_vencimiento', en5Dias.toISOString().split('T')[0])
-        .order('fecha_vencimiento', { ascending: true });
-
-      if (error) throw error;
-
-      if (clientes) {
-        const membersWithDays: ExpiringMember[] = clientes.map(cliente => ({
-          ...cliente,
-          dias_restantes: getDaysUntilExpiration(cliente.fecha_vencimiento)
-        }));
-
-        setExpiringMembers(membersWithDays);
-      }
-    } catch (error) {
-      console.error('Error al cargar socios próximos a vencer:', error);
-    }
-  };
-  const loadMonthlyRevenue = async () => {
-    try {
-      const { data: pagos, error } = await supabase
-        .from('historial_pagos')
-        .select('monto, metodo_pago, created_at')
-        .gte('created_at', '2025-10-01')
-        .lt('created_at', '2027-01-01');
-
-      if (error) throw error;
-
-      const meses: MonthlyRevenue[] = [];
-      const startDate = new Date(2025, 9, 1);
-      const endDate = new Date(2026, 11, 31);
-
-      let currentDate = new Date(startDate);
-      while (currentDate <= endDate) {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth();
-        const mesKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-        const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-        meses.push({
-          mes: mesKey,
-          mesNombre: `${mesesNombres[month]} ${year}`,
-          efectivo: 0,
-          yape: 0,
-          total: 0
-        });
-
-        currentDate.setMonth(currentDate.getMonth() + 1);
-      }
-
-      if (pagos) {
-        pagos.forEach(pago => {
-          const fecha = new Date(pago.created_at);
-          const year = fecha.getFullYear();
-          const month = fecha.getMonth();
-          const mesKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-          const mesData = meses.find(m => m.mes === mesKey);
-          if (mesData) {
-            const monto = pago.monto || 0;
-            mesData.total += monto;
-
-            if (pago.metodo_pago === 'efectivo') {
-              mesData.efectivo += monto;
-            } else if (pago.metodo_pago === 'yape') {
-              mesData.yape += monto;
-            }
-          }
-        });
-      }
-
-      meses.sort((a, b) => b.mes.localeCompare(a.mes));
-      setMonthlyRevenue(meses);
-    } catch (error) {
-      console.error('Error al cargar ingresos mensuales:', error);
-    }
-  };
 
   const handleAddMember = async (data: MemberFormData) => {
     try {
-      // Validación de campos obligatorios
-      if (!data.nombre || !data.dni || !data.plan || !data.fechaInicio) {
+      // 1. Validaciones
+      if (!data.nombres || !data.apellidos || !data.dni || !data.planId || !data.fechaInicio) {
         toast.warning('Por favor, completa los campos obligatorios');
         return;
       }
 
-      // Validar DNI (debe tener 8 dígitos)
-      if (data.dni.length !== 8 || !/^\d+$/.test(data.dni)) {
-        toast.warning('El DNI debe tener 8 dígitos numéricos');
+      // 2. Buscar plan
+      const { data: planData } = await (supabase
+        .from('planes') as any)
+        .select('*')
+        .eq('id', data.planId)
+        .single();
+
+      if (!planData) {
+        toast.error('Plan no encontrado');
         return;
       }
 
-      // Calcular fecha de vencimiento
-      const fechaVencimiento = calcularFechaVencimiento(data.plan, data.fechaInicio);
+      const fechaVencimiento = calcularFechaVencimiento(planData.duracion_dias, data.fechaInicio);
 
-      // Subir foto si existe
-      let fotoUrl = null;
-      if (data.foto) {
-        const fileExt = data.foto.name.split('.').pop();
-        const fileName = `${data.dni}-${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('fotos-clientes')
-          .upload(fileName, data.foto);
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from('fotos-clientes')
-            .getPublicUrl(fileName);
-          fotoUrl = urlData.publicUrl;
-        }
-      }
-
-      // Insertar cliente en la base de datos
-      const { data: newCliente, error } = await supabase
-        .from('clientes')
-        .insert([
-          {
-            nombre: data.nombre.trim(),
-            dni: data.dni.trim(),
-            telefono: data.telefono?.trim() || null,
-            email: data.email?.trim() || null,
-            fecha_nacimiento: data.fechaNacimiento || null,
-            plan: data.plan,
-            fecha_inicio: data.fechaInicio,
-            fecha_vencimiento: fechaVencimiento || null,
-            estado_pago: 'al-dia',
-            foto_url: fotoUrl,
-            monto_pagado: data.montoPagado,
-          },
-        ])
+      // 3. Insertar cliente
+      const { data: newCliente, error: clientError } = await (supabase
+        .from('clientes') as any)
+        .insert([{
+          nombres: data.nombres.trim(),
+          apellidos: data.apellidos.trim(),
+          dni: data.dni.trim(),
+          telefono: data.telefono?.trim() || null,
+          email: data.email?.trim() || null,
+          fecha_nacimiento: data.fechaNacimiento || null,
+        }])
         .select()
         .single();
 
-      if (error) {
-        console.error('Error al agregar cliente:', error);
-        toast.error(`Error al agregar cliente: ${error.message}`);
-        return;
-      }
+      if (clientError) throw clientError;
 
-      // Registrar el pago inicial en historial_pagos si hay monto pagado
-      if (newCliente && data.montoPagado && data.montoPagado > 0) {
-        const { error: pagoError } = await supabase
-          .from('historial_pagos')
+      // 4. Insertar matrícula
+      const { data: newMatricula, error: matriculaError } = await (supabase
+        .from('matriculas') as any)
+        .insert([{
+          cliente_id: newCliente.id,
+          plan_id: planData.id,
+          fecha_inicio: data.fechaInicio,
+          fecha_vencimiento: fechaVencimiento,
+          monto_total: planData.precio_base,
+          estado: 'activo'
+        }])
+        .select()
+        .single();
+
+      if (matriculaError) throw matriculaError;
+
+      // 5. Registrar pago
+      if (data.montoPagado > 0) {
+        await (supabase
+          .from('pagos') as any)
           .insert([{
-            cliente_id: newCliente.id,
-            monto: data.montoPagado,
-            metodo_pago: data.metodoPago || 'efectivo',
-            concepto: 'Pago inicial de membresía',
-            created_at: data.fechaInicio ? new Date(data.fechaInicio).toISOString() : new Date().toISOString()
+            matricula_id: (newMatricula as any).id,
+            monto_pagado: data.montoPagado,
+            metodo_pago: data.metodoPago,
+            fecha_pago: new Date().toISOString()
           }]);
-
-        if (pagoError) {
-          console.error('Error al registrar pago en historial:', pagoError);
-        }
       }
 
       setIsAddModalOpen(false);
-      toast.success('Cliente agregado exitosamente');
+      toast.success('Socio registrado con éxito');
 
-      // Mostrar modal de éxito con QR
-      setNewMemberData(data);
+      setNewMemberData({
+        ...data,
+        planName: planData.nombre
+      } as any);
       setIsSuccessModalOpen(true);
-
-      // Recargar estadísticas
-      await loadStats();
-      // No redirigir para que el usuario vea el modal con QR
-      // router.push('/clientes');
-    } catch (error) {
-      console.error('Error inesperado:', error);
-      toast.error('Error inesperado al agregar cliente');
+    } catch (error: any) {
+      console.error('Error al agregar cliente:', error);
+      toast.error(`Error: ${error.message || 'Error inesperado'}`);
     }
   };
 
-  const handleValidateAccess = async () => {
-    if (!dniSearch || dniSearch.length !== 8) {
-      toast.error('Ingresa un DNI válido (8 dígitos)');
-      return;
+  const quickActions = [
+    {
+      title: 'Validar Acceso',
+      desc: 'Control de entrada por DNI',
+      icon: QrCode,
+      color: 'from-blue-600 to-indigo-600',
+      action: () => router.push('/acceso')
+    },
+    {
+      title: 'Ver Dashboard',
+      desc: 'Resumen y finanzas',
+      icon: LayoutDashboard,
+      color: 'from-[#AB8745] to-[#D4A865]',
+      action: () => router.push('/dashboard')
+    },
+    {
+      title: 'Lista de Clientes',
+      desc: 'Gestionar base de datos',
+      icon: Users,
+      color: 'from-purple-600 to-pink-600',
+      action: () => router.push('/clientes')
     }
-
-    setSearching(true);
-    setSearchResult(null);
-
-    try {
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('nombre, plan, fecha_vencimiento')
-        .eq('dni', dniSearch)
-        .single();
-
-      if (error || !data) {
-        toast.error('Socio no encontrado');
-        setSearchResult(null);
-        return;
-      }
-
-      // Verificar si está vencido
-      const hoy = new Date();
-      const fechaVenc = data.fecha_vencimiento ? new Date(data.fecha_vencimiento) : null;
-      const vencido = fechaVenc ? hoy > fechaVenc : true;
-
-      setSearchResult({
-        nombre: data.nombre,
-        plan: data.plan,
-        vencido: vencido,
-      });
-
-      if (vencido) {
-        toast.error(`${data.nombre} - Membresía vencida`);
-      } else {
-        toast.success(`${data.nombre} - Acceso permitido`);
-      }
-    } catch (error) {
-      console.error('Error al validar acceso:', error);
-      toast.error('Error al validar acceso');
-    } finally {
-      setSearching(false);
-    }
-  };
+  ];
 
   return (
     <div className="flex min-h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      <Sidebar expiringCount={expiringMembers.length} />
+      <Sidebar />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-[#0a0a0a]">
-        <div className="p-6 md:p-8">
-          {/* Header */}
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-white mb-2">Dashboard</h2>
-            <p className="text-gray-400">Bienvenido al sistema de gestión de Inti-Gym Ayacucho</p>
-          </div>
+      <main className="flex-1 relative">
+        {/* Background Decorative Elements */}
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#AB8745]/10 rounded-full blur-[120px]"></div>
+          <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-[#AB8745]/5 rounded-full blur-[120px]"></div>
+        </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {/* Total Socios */}
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-[#AB8745]/20 rounded-xl flex items-center justify-center border border-[#AB8745]/30 group-hover:bg-[#AB8745]/30 transition-all">
-                  <Users className="w-6 h-6 text-[#D4A865]" />
-                </div>
-                {loading ? (
-                  <Loader2 className="w-8 h-8 text-[#D4A865] animate-spin" />
-                ) : (
-                  <span className="text-3xl font-bold text-[#D4A865]">{stats.totalSocios}</span>
-                )}
-              </div>
-              <h3 className="text-gray-300 font-semibold mb-1">Total Socios</h3>
-              <p className="text-sm text-gray-500">Miembros activos</p>
+        <div className="relative z-10 w-full max-w-6xl mx-auto px-6 py-12 md:py-20 flex flex-col justify-center min-h-full">
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center mb-16"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
+              <span className="text-xs font-bold uppercase tracking-widest text-gray-300">Inti-Gym Ayacucho</span>
             </div>
+            <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 bg-linear-to-r from-white via-gray-300 to-gray-500 bg-clip-text text-transparent">
+              BIENVENIDO AL <br /> SISTEMA DE GESTIÓN
+            </h1>
+            <p className="text-gray-400 text-lg md:text-xl max-w-2xl mx-auto">
+              Administración para el gimnasio, gestión de socios, cobros y accesos con precisión.
+            </p>
+          </motion.div>
 
-            {/* Pagos Pendientes */}
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-[#AB8745]/20 rounded-xl flex items-center justify-center border border-[#AB8745]/30 group-hover:bg-[#AB8745]/30 transition-all">
-                  <CreditCard className="w-6 h-6 text-[#D4A865]" />
+          {/* Core Action Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+
+            {/* Registration Card (Primary) */}
+            <motion.button
+              whileHover={{ scale: 1.02, translateY: -5 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsAddModalOpen(true)}
+              className="group relative h-80 bg-linear-to-br from-[#1a1a1a] to-[#0a0a0a] border border-[#AB8745]/30 rounded-[2.5rem] p-10 overflow-hidden text-left shadow-2xl"
+            >
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-[#AB8745]/10 to-transparent pointer-events-none"></div>
+
+              <div className="flex justify-between items-start mb-6">
+                <div className="p-5 bg-linear-to-br from-[#AB8745] to-[#D4A865] rounded-3xl shadow-xl shadow-[#AB8745]/20 group-hover:scale-110 transition-transform">
+                  <Plus className="w-10 h-10 text-white" />
                 </div>
-                {loading ? (
-                  <Loader2 className="w-8 h-8 text-[#D4A865] animate-spin" />
-                ) : (
-                  <span className="text-3xl font-bold text-[#D4A865]">{stats.pagosPendientes}</span>
-                )}
-              </div>
-              <h3 className="text-gray-300 font-semibold mb-1">Renovaciones Pendientes</h3>
-              <p className="text-sm text-gray-500">Membresías vencidas</p>
-            </div>
-
-            {/* Ingresos del Mes */}
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl p-6 shadow-2xl hover:shadow-[#AB8745]/10 transition-all duration-300 hover:border-[#AB8745]/40 group">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-[#AB8745]/20 rounded-xl flex items-center justify-center border border-[#AB8745]/30 group-hover:bg-[#AB8745]/30 transition-all">
-                  <DollarSign className="w-6 h-6 text-[#D4A865]" />
+                <div className="flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full">
+                  <ShieldCheck className="w-4 h-4 text-green-500" />
+                  <span className="text-[10px] font-black tracking-widest uppercase">Safe & Secure</span>
                 </div>
-                {loading ? (
-                  <Loader2 className="w-8 h-8 text-[#D4A865] animate-spin" />
-                ) : (
-                  <span className="text-3xl font-bold text-[#D4A865]">S/ {stats.ingresosMes.toLocaleString()}</span>
-                )}
               </div>
-              <h3 className="text-gray-300 font-semibold mb-1">Ingresos del Mes</h3>
-              <p className="text-sm text-gray-500">Mes actual</p>
-            </div>
-          </div>
 
-          {/* Payment Method Breakdown - Enhanced 3D Design */}
-          <div className="mb-8">
-            <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-[#AB8745] to-[#D4A865] rounded-lg flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-white" />
+              <h3 className="text-3xl font-black mb-3">Registrar Nuevo Socio</h3>
+              <p className="text-gray-400 font-medium">Inicia el proceso de inscripción para un nuevo miembro en segundos.</p>
+
+              <div className="absolute bottom-10 right-10 w-12 h-12 rounded-full border border-white/20 flex items-center justify-center group-hover:border-[#AB8745] transition-colors">
+                <ChevronRight className="w-6 h-6 text-white group-hover:text-[#AB8745] transition-colors" />
               </div>
-              Desglose por Método de Pago
-            </h3>
+            </motion.button>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Efectivo - Enhanced Card */}
-              <div className="group relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500"></div>
-                <div className="relative bg-gradient-to-br from-green-500/10 via-green-600/5 to-transparent border border-green-500/30 rounded-2xl p-6 hover:border-green-400/50 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-green-500/20 backdrop-blur-xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30 group-hover:scale-110 transition-transform">
-                        <span className="text-2xl">💵</span>
-                      </div>
-                      <div>
-                        <h4 className="text-green-400 font-bold text-lg">Efectivo</h4>
-                        <p className="text-xs text-gray-500">Pagos en efectivo</p>
-                      </div>
-                    </div>
+            {/* Quick Navigation grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {quickActions.map((action, idx) => (
+                <motion.button
+                  key={idx}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={action.action}
+                  className={`p-6 rounded-4xl bg-linear-to-br ${action.color} bg-opacity-10 border border-white/10 flex flex-col justify-between items-start text-left group hover:shadow-xl transition-all relative overflow-hidden h-40 ${idx === 2 ? 'sm:col-span-2' : ''}`}
+                >
+                  <div className="absolute inset-0 bg-black/60 z-0"></div>
+                  <div className="absolute inset-0 bg-linear-to-br opacity-20 from-white to-transparent dark:from-white/10 z-0"></div>
+
+                  <div className="relative z-10 p-3 bg-white/10 rounded-xl mb-4 group-hover:scale-110 transition-transform">
+                    <action.icon className="w-5 h-5 text-white" />
                   </div>
 
-                  {loading ? (
-                    <div className="flex items-center justify-center h-20">
-                      <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-3">
-                        <p className="text-3xl font-bold text-white mb-1">S/ {stats.ingresosPorMetodo.efectivo.toLocaleString()}</p>
-                        <p className="text-sm text-gray-400">
-                          {stats.ingresosMes > 0 ? ((stats.ingresosPorMetodo.efectivo / stats.ingresosMes) * 100).toFixed(1) : 0}% del total
-                        </p>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="relative h-2 bg-green-950/30 rounded-full overflow-hidden">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: stats.ingresosMes > 0 ? `${(stats.ingresosPorMetodo.efectivo / stats.ingresosMes) * 100}%` : '0%' }}
-                        >
-                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Yape - Enhanced Card */}
-              <div className="group relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500"></div>
-                <div className="relative bg-gradient-to-br from-purple-500/10 via-purple-600/5 to-transparent border border-purple-500/30 rounded-2xl p-6 hover:border-purple-400/50 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20 backdrop-blur-xl">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform">
-                        <span className="text-2xl">📱</span>
-                      </div>
-                      <div>
-                        <h4 className="text-purple-400 font-bold text-lg">Yape</h4>
-                        <p className="text-xs text-gray-500">Pagos digitales</p>
-                      </div>
-                    </div>
+                  <div className="relative z-10">
+                    <h4 className="font-bold text-lg mb-1">{action.title}</h4>
+                    <p className="text-[10px] uppercase font-black text-white/50">{action.desc}</p>
                   </div>
-
-                  {loading ? (
-                    <div className="flex items-center justify-center h-20">
-                      <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-3">
-                        <p className="text-3xl font-bold text-white mb-1">S/ {stats.ingresosPorMetodo.yape.toLocaleString()}</p>
-                        <p className="text-sm text-gray-400">
-                          {stats.ingresosMes > 0 ? ((stats.ingresosPorMetodo.yape / stats.ingresosMes) * 100).toFixed(1) : 0}% del total
-                        </p>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="relative h-2 bg-purple-950/30 rounded-full overflow-hidden">
-                        <div
-                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-purple-400 rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: stats.ingresosMes > 0 ? `${(stats.ingresosPorMetodo.yape / stats.ingresosMes) * 100}%` : '0%' }}
-                        >
-                          <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+                </motion.button>
+              ))}
             </div>
+
           </div>
 
-          {/* Próximos Vencimientos */}
-          {expiringMembers.length > 0 && (
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/30 animate-pulse">
-                  <AlertTriangle className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-white">Próximos Vencimientos</h3>
-                  <p className="text-sm text-gray-400">Membresías que vencen en los próximos 5 días</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {expiringMembers.map((member) => {
-                  const colors = getExpirationAlertColor(member.dias_restantes);
-
-                  return (
-                    <div
-                      key={member.id}
-                      className={`${colors.bg} ${colors.border} border-2 rounded-2xl p-5 shadow-xl hover:scale-105 transition-all duration-300 backdrop-blur-xl`}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <h4 className="text-white font-bold text-lg mb-1">{member.nombre}</h4>
-                          <p className="text-gray-400 text-sm">{member.plan}</p>
-                        </div>
-                        <div className={`${colors.badge} px-3 py-1 rounded-full flex items-center gap-1.5`}>
-                          <Clock className="w-4 h-4 text-white" />
-                          <span className="text-white font-bold text-sm">
-                            {member.dias_restantes} {member.dias_restantes === 1 ? 'día' : 'días'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Vence el</p>
-                          <p className={`${colors.text} font-semibold text-sm`}>
-                            {new Date(member.fecha_vencimiento).toLocaleDateString('es-PE', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </p>
-                        </div>
-                        <WhatsAppButton
-                          telefono={member.telefono}
-                          nombre={member.nombre}
-                          fechaVencimiento={member.fecha_vencimiento}
-                          size="md"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          {/* Ingresos Mensuales - Vista Compacta */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-[#AB8745] to-[#D4A865] rounded-xl flex items-center justify-center shadow-lg shadow-[#AB8745]/30">
-                <DollarSign className="w-6 h-6 text-white" />
+          {/* System Status Footer */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="flex flex-col md:flex-row items-center justify-between gap-6 px-10 py-6 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full border border-[#AB8745]/20 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-[#D4A865]" />
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-white">Ingresos por Mes</h3>
-                <p className="text-sm text-gray-400">Octubre 2025 - Diciembre 2026</p>
+                <h5 className="font-bold">Hora del Servidor</h5>
+                <p className="text-sm text-gray-400">{time || '--:--:--'}</p>
               </div>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="hidden md:flex items-center justify-between p-4 bg-black/40 border-b border-[#AB8745]/10 text-sm font-medium text-gray-400 uppercase tracking-wider">
-                <div className="w-1/4 pl-2">Mes</div>
-                <div className="flex-1 text-center">Desglose (Efectivo / Yape)</div>
-                <div className="w-1/6 text-right pr-2">Total</div>
+            <div className="flex items-center gap-8 text-center md:text-right">
+              <div>
+                <p className="text-[10px] font-black uppercase text-gray-500 mb-1">Status</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                  <span className="text-xs font-bold">Base de Datos Link</span>
+                </div>
               </div>
-
-              <div className="divide-y divide-white/5">
-                {monthlyRevenue.map((mes) => {
-                  const porcentajeEfectivo = mes.total > 0 ? (mes.efectivo / mes.total) * 100 : 0;
-                  const porcentajeYape = mes.total > 0 ? (mes.yape / mes.total) * 100 : 0;
-
-                  return (
-                    <div
-                      key={mes.mes}
-                      className="group p-4 hover:bg-white/5 transition-all duration-300 flex flex-col md:flex-row items-center gap-4"
-                    >
-                      {/* Mes */}
-                      <div className="w-full md:w-1/4 flex justify-between md:block">
-                        <span className="md:hidden text-gray-400 text-sm">Mes</span>
-                        <h4 className="text-white font-semibold text-lg md:text-base md:pl-2">{mes.mesNombre}</h4>
-                      </div>
-
-                      {/* Barra de Progreso Combinada */}
-                      <div className="w-full md:flex-1 space-y-2">
-                        {mes.total > 0 ? (
-                          <>
-                            <div className="flex w-full h-3 bg-gray-700/50 rounded-full overflow-hidden">
-                              <div
-                                className="bg-green-500 hover:bg-green-400 transition-all duration-500 relative group/bar"
-                                style={{ width: `${porcentajeEfectivo}%` }}
-                              >
-                                <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs py-1 px-2 rounded whitespace-nowrap pointer-events-none transition-opacity">
-                                  Efectivo: S/ {mes.efectivo}
-                                </div>
-                              </div>
-                              <div
-                                className="bg-purple-500 hover:bg-purple-400 transition-all duration-500 relative group/bar"
-                                style={{ width: `${porcentajeYape}%` }}
-                              >
-                                <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs py-1 px-2 rounded whitespace-nowrap pointer-events-none transition-opacity">
-                                  Yape: S/ {mes.yape}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex justify-between text-xs px-1">
-                              <span className="text-green-400 font-medium">
-                                Efectivo: <span className="text-white">S/ {mes.efectivo}</span> ({porcentajeEfectivo.toFixed(0)}%)
-                              </span>
-                              <span className="text-purple-400 font-medium">
-                                Yape: <span className="text-white">S/ {mes.yape}</span> ({porcentajeYape.toFixed(0)}%)
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-gray-500 text-sm text-center italic">Sin movimientos registrados</p>
-                        )}
-                      </div>
-
-                      {/* Total */}
-                      <div className="w-full md:w-1/6 flex justify-between md:block md:text-right md:pr-2">
-                        <span className="md:hidden text-gray-400 text-sm">Total Mensual</span>
-                        <div className={`font-bold text-xl md:text-lg ${mes.total > 0 ? 'text-[#D4A865]' : 'text-gray-600'}`}>
-                          S/ {mes.total.toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div>
+                <p className="text-[10px] font-black uppercase text-gray-500 mb-1">Versión</p>
+                <span className="text-xs font-bold">1.5 Elite Release</span>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-
-          {/* Resumen Rápido */}
-          <div className="bg-white/5 backdrop-blur-xl border border-[#AB8745]/20 rounded-2xl shadow-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4">Resumen Rápido</h3>
-            <p className="text-gray-400">
-              Bienvenido al dashboard principal. Desde aquí puedes acceder a todas las secciones del sistema:
-              <span className="block mt-2">
-                • <strong className="text-[#D4A865]">Clientes</strong>: Gestiona todos los socios registrados
-              </span>
-              <span className="block">
-                • <strong className="text-[#D4A865]">Pagos</strong>: Administra los pagos y facturación
-              </span>
-              <span className="block">
-                • <strong className="text-[#D4A865]">Configuración</strong>: Ajusta los parámetros del sistema
-              </span>
-            </p>
-          </div>
         </div>
       </main>
 
-      {/* Botón Flotante - Nuevo Socio */}
-      <button
-        onClick={() => setIsAddModalOpen(true)}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-red-800 text-white rounded-full shadow-lg shadow-[#AB8745]/50 flex items-center justify-center transition-all duration-300 hover:scale-110 z-50 group"
-      >
-        <Plus className="w-6 h-6" />
-        <span className="absolute right-full mr-4 px-4 py-2 bg-[#0a0a0a]/95 backdrop-blur-xl text-white text-sm font-semibold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-[#AB8745]/20">
-          Nuevo Socio
-        </span>
-      </button>
-
-      {/* Modal para Nuevo Socio */}
       <AddMemberModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSubmit={handleAddMember}
       />
 
-      {/* Modal de Éxito con QR */}
       {newMemberData && (
         <MemberSuccessModal
           isOpen={isSuccessModalOpen}
           onClose={() => setIsSuccessModalOpen(false)}
           memberData={{
-            nombre: newMemberData.nombre,
-            dni: newMemberData.dni,
-            telefono: newMemberData.telefono,
-            plan: newMemberData.plan,
+            nombre: `${(newMemberData as any).nombres} ${(newMemberData as any).apellidos}`,
+            dni: (newMemberData as any).dni,
+            telefono: (newMemberData as any).telefono,
+            plan: (newMemberData as any).planName || 'Plan'
           }}
         />
       )}

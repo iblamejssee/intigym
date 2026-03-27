@@ -9,11 +9,12 @@ interface MemberSuccessModalProps {
     isOpen: boolean;
     onClose: () => void;
     memberData: {
-        nombre: string;
+        nombre: string; // Ya viene concatenado del padre
         dni: string;
         telefono?: string;
         plan: string;
     };
+
 }
 
 export default function MemberSuccessModal({ isOpen, onClose, memberData }: MemberSuccessModalProps) {
@@ -137,7 +138,7 @@ export default function MemberSuccessModal({ isOpen, onClose, memberData }: Memb
                         <button
                             onClick={handleSendWhatsApp}
                             disabled={!memberData.telefono}
-                            className="px-4 py-3 bg-gradient-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-[#AB8745] text-white rounded-lg font-semibold transition-all shadow-lg shadow-[#AB8745]/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-4 py-3 bg-linear-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-[#AB8745] text-white rounded-lg font-semibold transition-all shadow-lg shadow-[#AB8745]/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <Send className="w-4 h-4" />
                             WhatsApp

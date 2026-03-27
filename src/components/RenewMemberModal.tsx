@@ -10,7 +10,7 @@ interface RenewMemberModalProps {
     onClose: () => void;
     onSubmit: (data: RenewalFormData) => void;
     memberData: {
-        id: number;
+        id: string; // UUID
         nombre: string;
         dni: string;
         planActual: string;
@@ -19,22 +19,28 @@ interface RenewMemberModalProps {
 }
 
 export interface RenewalFormData {
-    plan: string;
+    planId: number;
+    planNombre: string;
     fechaInicio: string;
+    montoTotal: number;
     montoPagado: number;
     metodoPago: string;
     fechaVencimiento: string;
 }
 
 interface PlanOption {
+    id: number;
     nombre: string;
     precio: number;
+    duracion_dias: number;
 }
 
 export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData }: RenewMemberModalProps) {
     const [formData, setFormData] = useState<RenewalFormData>({
-        plan: '',
+        planId: 0,
+        planNombre: '',
         fechaInicio: new Date().toISOString().split('T')[0],
+        montoTotal: 0,
         montoPagado: 0,
         metodoPago: 'efectivo',
         fechaVencimiento: '',
@@ -56,42 +62,44 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
 
     // Si cambia el plan o la fecha de inicio, recalcular vencimiento
     useEffect(() => {
-        if (formData.plan && formData.fechaInicio) {
-            const fechaVenc = calcularFechaVencimiento(formData.plan, formData.fechaInicio);
-            setFormData(prev => ({ ...prev, fechaVencimiento: fechaVenc }));
+        if (formData.planId && formData.fechaInicio) {
+            const planSeleccionado = planes.find(p => p.id === formData.planId);
+            if (planSeleccionado) {
+                const inicio = new Date(formData.fechaInicio);
+                const vencimiento = new Date(inicio);
+                vencimiento.setDate(vencimiento.getDate() + planSeleccionado.duracion_dias);
+                setFormData(prev => ({ ...prev, fechaVencimiento: vencimiento.toISOString().split('T')[0] }));
+            }
         }
-    }, [formData.plan, formData.fechaInicio]);
+    }, [formData.planId, formData.fechaInicio, planes]);
 
     // Pre-seleccionar el plan actual del miembro si existe en la lista
     useEffect(() => {
-        if (memberData && planes.length > 0 && !formData.plan) {
+        if (memberData && planes.length > 0 && !formData.planId) {
             const currentPlan = planes.find(p => p.nombre === memberData.planActual);
             if (currentPlan) {
                 setFormData(prev => ({
                     ...prev,
-                    plan: currentPlan.nombre,
+                    planId: currentPlan.id,
+                    planNombre: currentPlan.nombre,
+                    montoTotal: currentPlan.precio,
                     montoPagado: currentPlan.precio
                 }));
             }
         }
-    }, [memberData, planes, formData.plan]);
+    }, [memberData, planes, formData.planId]);
 
     const loadPlanes = async () => {
         try {
-            const { data, error } = await supabase
-                .from('configuracion')
-                .select('clave, valor')
-                .like('clave', 'precio_%')
-                .order('valor');
+            const { data, error } = await (supabase
+                .from('planes') as any)
+                .select('*')
+                .order('nombre');
 
             if (error) throw error;
 
             if (data) {
-                const planesData = data.map(item => ({
-                    nombre: item.clave.replace('precio_', ''),
-                    precio: parseFloat(item.valor),
-                }));
-                setPlanes(planesData);
+                setPlanes(data);
             }
         } catch (error) {
             console.error('Error al cargar planes:', error);
@@ -102,11 +110,14 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
 
-        if (name === 'plan') {
-            const planSeleccionado = planes.find(p => p.nombre === value);
+        if (name === 'planId') {
+            const id = parseInt(value);
+            const planSeleccionado = planes.find(p => p.id === id);
             setFormData(prev => ({
                 ...prev,
-                [name]: value,
+                planId: id,
+                planNombre: planSeleccionado?.nombre || '',
+                montoTotal: planSeleccionado?.precio || 0,
                 montoPagado: planSeleccionado?.precio || 0
             }));
         } else {
@@ -116,10 +127,7 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!formData.plan || !formData.montoPagado || !formData.fechaInicio) {
-            toast.error('Por favor completa los campos requeridos');
-            return;
-        }
+        // Validación relajada
         onSubmit(formData);
     };
 
@@ -130,7 +138,7 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
             <div className="w-full max-w-md bg-[#0a0a0a] border border-[#AB8745]/30 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-[#AB8745]/20 bg-gradient-to-r from-[#AB8745]/10 to-transparent">
+                <div className="flex items-center justify-between p-6 border-b border-[#AB8745]/20 bg-linear-to-r from-[#AB8745]/10 to-transparent">
                     <div>
                         <h2 className="text-xl font-bold text-white">Renovar Membresía</h2>
                         <p className="text-sm text-[#AB8745] font-medium">{memberData.nombre}</p>
@@ -148,23 +156,25 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
                             <div className="grid grid-cols-2 gap-3">
                                 {planes.map((plan) => (
                                     <button
-                                        key={plan.nombre}
+                                        key={plan.id}
                                         type="button"
                                         onClick={() => {
                                             setFormData(prev => ({
                                                 ...prev,
-                                                plan: plan.nombre,
+                                                planId: plan.id,
+                                                planNombre: plan.nombre,
+                                                montoTotal: plan.precio,
                                                 montoPagado: plan.precio
                                             }));
                                         }}
-                                        className={`p-3 rounded-xl border transition-all text-left relative overflow-hidden group ${formData.plan === plan.nombre
-                                                ? 'border-[#AB8745] bg-[#AB8745]/20 text-white shadow-[0_0_15px_rgba(171,135,69,0.3)]'
-                                                : 'border-white/10 bg-white/5 text-gray-400 hover:border-[#AB8745]/50 hover:bg-white/10'
+                                        className={`p-3 rounded-xl border transition-all text-left relative overflow-hidden group ${formData.planId === plan.id
+                                            ? 'border-[#AB8745] bg-[#AB8745]/20 text-white shadow-[0_0_15px_rgba(171,135,69,0.3)]'
+                                            : 'border-white/10 bg-white/5 text-gray-400 hover:border-[#AB8745]/50 hover:bg-white/10'
                                             }`}
                                     >
                                         <div className="font-semibold capitalize text-lg">{plan.nombre}</div>
                                         <div className="text-sm opacity-80 mt-1">S/ {plan.precio}</div>
-                                        {formData.plan === plan.nombre && (
+                                        {formData.planId === plan.id && (
                                             <div className="absolute top-2 right-2 text-[#AB8745]">
                                                 <CheckCircle className="w-4 h-4 fill-[#AB8745] text-black" />
                                             </div>
@@ -186,7 +196,6 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
                                         value={formData.fechaInicio}
                                         onChange={handleChange}
                                         className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-[#AB8745] focus:ring-1 focus:ring-[#AB8745]"
-                                        required
                                     />
                                 </div>
                             </div>
@@ -211,7 +220,6 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
                                         onChange={handleChange}
                                         className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-[#AB8745] focus:ring-1 focus:ring-[#AB8745]"
                                         placeholder="0.00"
-                                        required
                                     />
                                 </div>
                             </div>
@@ -225,8 +233,10 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
                                         onChange={handleChange}
                                         className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-[#AB8745] focus:ring-1 focus:ring-[#AB8745] appearance-none"
                                     >
-                                        <option value="efectivo">Efectivo</option>
-                                        <option value="yape">Yape</option>
+                                        <option value="efectivo" className="bg-[#0a0a0a]">Efectivo</option>
+                                        <option value="yape" className="bg-[#0a0a0a]">Yape</option>
+                                        <option value="plin" className="bg-[#0a0a0a]">Plin</option>
+                                        <option value="transferencia" className="bg-[#0a0a0a]">Transferencia</option>
                                     </select>
                                 </div>
                             </div>
@@ -243,8 +253,7 @@ export default function RenewMemberModal({ isOpen, onClose, onSubmit, memberData
                         </button>
                         <button
                             type="submit"
-                            disabled={!formData.plan}
-                            className="flex-1 px-4 py-3 bg-gradient-to-r from-[#AB8745] to-[#D4A865] hover:from-[#8B6935] hover:to-[#B68A45] text-white rounded-xl font-bold shadow-lg shadow-[#AB8745]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                            className="flex-1 px-4 py-3 bg-linear-to-r from-[#AB8745] to-[#D4A865] hover:from-[#8B6935] hover:to-[#B68A45] text-white rounded-xl font-bold shadow-lg shadow-[#AB8745]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                         >
                             Renovar Membresía
                         </button>

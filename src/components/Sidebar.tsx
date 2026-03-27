@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, CreditCard, Settings, ChevronLeft, ChevronRight, LogOut, QrCode, Menu, X } from 'lucide-react';
+import { Home, Users, CreditCard, Settings, ChevronLeft, ChevronRight, LogOut, QrCode, Menu, X, DollarSign } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface SidebarProps {
   expiringCount?: number;
@@ -19,6 +20,7 @@ export default function Sidebar({ expiringCount = 0 }: SidebarProps) {
 
   const menuItems = [
     { icon: Home, label: 'Inicio', path: '/' },
+    { icon: DollarSign, label: 'Resumen', path: '/dashboard' },
     { icon: QrCode, label: 'Acceso', path: '/acceso' },
     { icon: Users, label: 'Clientes', path: '/clientes' },
     { icon: CreditCard, label: 'Pagos', path: '/pagos' },
@@ -39,45 +41,54 @@ export default function Sidebar({ expiringCount = 0 }: SidebarProps) {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-[#0a0a0a]/90 border border-[#AB8745]/30 text-[#D4A865] rounded-lg shadow-lg backdrop-blur-xl"
+        className="md:hidden fixed top-6 left-6 z-50 p-3 bg-[#1a1a1a]/90 border border-[#AB8745]/30 text-[#D4A865] rounded-2xl shadow-2xl backdrop-blur-xl hover:scale-105 active:scale-95 transition-all"
+        aria-label={isMobileOpen ? 'Cerrar menú' : 'Abrir menú'}
       >
         {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
       </button>
 
       {/* Mobile Overlay */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {isMobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-40 md:hidden backdrop-blur-sm"
+            onClick={() => setIsMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar Container */}
       <aside
         className={`
           fixed md:relative z-40 h-full
           ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          ${sidebarOpen ? 'w-64' : 'w-20'}
-          bg-[#0a0a0a]/95 backdrop-blur-xl border-r border-[#AB8745]/20 
-          transition-all duration-300 flex flex-col
-          inset-y-0 left-0
+          ${sidebarOpen ? 'w-72' : 'w-24'}
+          bg-[#0a0a0a]/95 backdrop-blur-2xl border-r border-[#AB8745]/20 
+          transition-all duration-500 ease-in-out flex flex-col
+          inset-y-0 left-0 shadow-2xl
         `}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-[#AB8745]/20 mt-14 md:mt-0">
-          <div className="flex items-center gap-3">
-            <div className="w-14 h-14 relative flex-shrink-0">
+        <div className="p-8 border-b border-[#AB8745]/10 mt-20 md:mt-0">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 relative shrink-0">
               <img
                 src="/intigym-logo.png"
                 alt="IntiGym Logo"
-                className="w-full h-full object-contain filter drop-shadow-lg"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(171,135,69,0.3)]"
               />
             </div>
             {sidebarOpen && (
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-tight">INTI-GYM</h1>
-                <p className="text-xs text-[#AB8745] font-semibold">Ayacucho</p>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <h1 className="text-2xl font-black text-white tracking-tighter leading-none">INTI-GYM</h1>
+                <p className="text-[10px] text-[#AB8745] font-black uppercase tracking-[0.2em] mt-1">Ayacucho</p>
+              </motion.div>
             )}
           </div>
         </div>
@@ -96,7 +107,7 @@ export default function Sidebar({ expiringCount = 0 }: SidebarProps) {
                 href={item.path}
                 onClick={() => setIsMobileOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
-                  ? 'bg-gradient-to-r from-[#AB8745]/20 to-[#AB8745]/10 border border-[#AB8745]/30 text-[#D4A865] shadow-lg shadow-[#AB8745]/10'
+                  ? 'bg-linear-to-r from-[#AB8745]/20 to-[#AB8745]/10 border border-[#AB8745]/30 text-[#D4A865] shadow-lg shadow-[#AB8745]/10'
                   : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
               >
@@ -139,7 +150,7 @@ export default function Sidebar({ expiringCount = 0 }: SidebarProps) {
 
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-[#AB8745] transition-all hidden md:flex"
+            className="w-full hidden md:flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:bg-white/5 hover:text-[#AB8745] transition-all"
           >
             {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
             {sidebarOpen && <span>Ocultar</span>}

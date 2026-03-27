@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface PlanOption {
+  id: number;
   nombre: string;
   precio: number;
 }
@@ -15,17 +16,18 @@ interface EditMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: MemberFormData) => void;
-  memberData: MemberFormData & { id: number };
+  memberData: MemberFormData & { id: string };
 }
 
 export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData }: EditMemberModalProps) {
   const [formData, setFormData] = useState<MemberFormData>({
-    nombre: '',
+    nombres: '',
+    apellidos: '',
     dni: '',
     telefono: '',
     email: '',
     fechaNacimiento: '',
-    plan: '',
+    planId: '',
     fechaInicio: '',
     montoPagado: 0,
     metodoPago: 'efectivo',
@@ -39,18 +41,18 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
       loadPlanes();
       if (memberData) {
         setFormData({
-          nombre: memberData.nombre || '',
+          nombres: memberData.nombres || '',
+          apellidos: memberData.apellidos || '',
           dni: memberData.dni || '',
           telefono: memberData.telefono || '',
           email: memberData.email || '',
           fechaNacimiento: memberData.fechaNacimiento || '',
-          plan: memberData.plan || '',
+          planId: memberData.planId || '',
           fechaInicio: memberData.fechaInicio || '',
           montoPagado: memberData.montoPagado || 0,
           metodoPago: memberData.metodoPago || 'efectivo',
           foto: null,
         });
-        // Si hay una foto existente, mostrar preview (en producción vendría de la URL)
         setPreview(null);
       }
     }
@@ -59,27 +61,21 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
   const loadPlanes = async () => {
     try {
       const { data, error } = await supabase
-        .from('configuracion')
-        .select('clave, valor')
-        .like('clave', 'precio_%')
-        .order('valor');
+        .from('planes')
+        .select('*')
+        .order('nombre');
 
       if (error) {
         console.error('Error al cargar planes:', error);
-        toast.error('Error al cargar planes de configuración');
+        toast.error('Error al cargar planes');
         return;
       }
 
-      if (!data || data.length === 0) {
-        toast.warning('No hay planes configurados');
-        return;
-      }
-
-      const planesData = data.map(item => ({
-        nombre: item.clave.replace('precio_', ''),
-        precio: parseFloat(item.valor),
-      }));
-      setPlanes(planesData);
+      setPlanes((data as any[]).map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        precio: p.precio_base
+      })));
     } catch (error) {
       console.error('Error al cargar planes:', error);
       toast.error('Error al cargar planes');
@@ -160,29 +156,45 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
             </div>
 
             {/* Datos Personales */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Nombre Completo *</label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                  type="text"
-                  name="nombre"
-                  value={formData.nombre}
-                  onChange={handleChange}
-                  required
-                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
-                />
+            <div className="grid grid-cols-2 gap-4 md:col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Nombres</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    name="nombres"
+                    value={formData.nombres}
+                    onChange={handleChange}
+
+                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Apellidos</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    name="apellidos"
+                    value={formData.apellidos}
+                    onChange={handleChange}
+
+                    className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
+                  />
+                </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">DNI *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">DNI</label>
               <input
                 type="text"
                 name="dni"
                 value={formData.dni}
                 onChange={handleChange}
-                required
+
                 maxLength={8}
                 className="w-full px-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
               />
@@ -227,20 +239,20 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Plan *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Plan</label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <select
-                  name="plan"
-                  value={formData.plan}
+                  name="planId"
+                  value={formData.planId}
                   onChange={handleChange}
-                  required
+
                   className="w-full pl-10 pr-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
                 >
                   <option value="">Selecciona un plan</option>
                   {planes.map((plan) => (
-                    <option key={plan.nombre} value={plan.nombre}>
-                      {plan.nombre.charAt(0).toUpperCase() + plan.nombre.slice(1).replace('_', ' ')} - S/ {plan.precio}
+                    <option key={plan.id} value={plan.id}>
+                      {plan.nombre} - S/ {plan.precio}
                     </option>
                   ))}
                 </select>
@@ -248,7 +260,7 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Fecha de Inicio *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Fecha de Inicio</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
                 <input
@@ -256,9 +268,47 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
                   name="fechaInicio"
                   value={formData.fechaInicio}
                   onChange={handleChange}
-                  required
                   className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
                 />
+              </div>
+            </div>
+
+            {/* Información de Pago */}
+            <div className="md:col-span-2 mt-4 pt-4 border-t border-[#AB8745]/10">
+              <h4 className="text-[#D4A865] font-semibold mb-4 flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Información del Último Pago
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Monto Cancelado</label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      type="number"
+                      name="montoPagado"
+                      value={formData.montoPagado}
+                      onChange={handleChange}
+                      step="0.01"
+                      min="0"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-[#AB8745]/20 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Método de Pago</label>
+                  <select
+                    name="metodoPago"
+                    value={formData.metodoPago}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2.5 bg-[#1a1a1a] border border-[#AB8745]/20 rounded-lg text-white focus:outline-none focus:border-[#AB8745] focus:ring-2 focus:ring-[#AB8745]/20 transition-all appearance-none"
+                  >
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="yape">📱 Yape</option>
+                    <option value="plin">📱 Plin</option>
+                    <option value="transferencia">💳 Transferencia</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -274,7 +324,7 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-red-800 text-white rounded-lg font-semibold transition-all shadow-lg shadow-[#AB8745]/20"
+              className="flex-1 px-4 py-2.5 bg-linear-to-r from-[#AB8745] to-[#8B6935] hover:from-[#8B6935] hover:to-red-800 text-white rounded-lg font-semibold transition-all shadow-lg shadow-[#AB8745]/20"
             >
               Guardar Cambios
             </button>
