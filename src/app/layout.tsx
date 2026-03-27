@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   title: "Inti-Gym Ayacucho - Sistema de Gestión",
   description: "Sistema de gestión premium para gimnasios",
   icons: {
-    icon: "/intigym-logo.png",
-    apple: "/intigym-logo.png",
+    icon: "/intigym-logo.png?v=2",
+    apple: "/intigym-logo.png?v=2",
   },
 };
 
