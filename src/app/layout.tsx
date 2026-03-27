@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Inti-Gym Ayacucho - Sistema de Gestión",
   description: "Sistema de gestión premium para gimnasios",
+  icons: {
+    icon: "/intigym-logo.png",
+    apple: "/intigym-logo.png",
+  },
 };
 
 export default function RootLayout({
