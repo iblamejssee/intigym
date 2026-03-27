@@ -61,8 +61,8 @@ export default function AddMemberModal({ isOpen, onClose, onSubmit }: AddMemberM
 
   const loadPlanes = async () => {
     try {
-      const { data, error } = await supabase
-        .from('planes')
+      const { data, error } = await (supabase
+        .from('planes') as any)
         .select('*')
         .order('nombre');
 

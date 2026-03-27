@@ -29,8 +29,8 @@ export default function ConfiguracionPage() {
       setLoading(true);
 
       // Cargar planes desde la tabla 'planes'
-      const { data, error } = await supabase
-        .from('planes')
+      const { data, error } = await (supabase
+        .from('planes') as any)
         .select('*')
         .order('id');
 
@@ -105,8 +105,8 @@ export default function ConfiguracionPage() {
 
       if (idsToDelete.length > 0) {
         // Verificar si los planes a eliminar están en uso en matriculas
-        const { count, error: countError } = await supabase
-          .from('matriculas')
+        const { count, error: countError } = await (supabase
+          .from('matriculas') as any)
           .select('*', { count: 'exact', head: true })
           .in('plan_id', idsToDelete);
 
@@ -116,8 +116,8 @@ export default function ConfiguracionPage() {
           return;
         }
 
-        const { error: deleteError } = await supabase
-          .from('planes')
+        const { error: deleteError } = await (supabase
+          .from('planes') as any)
           .delete()
           .in('id', idsToDelete);
 
@@ -136,8 +136,8 @@ export default function ConfiguracionPage() {
         descripcion: rest.nombre // Guardamos el nombre como descripción por defecto
       }));
 
-      const { error: upsertError } = await supabase
-        .from('planes')
+      const { error: upsertError } = await (supabase
+        .from('planes') as any)
         .upsert(planesParaGuardar as any);
 
       if (upsertError) {

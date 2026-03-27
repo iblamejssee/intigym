@@ -45,24 +45,24 @@ export async function actualizarEstadosMatriculas() {
   const hoy = new Date().toISOString().split('T')[0];
 
   // Actualizar matrículas vencidas
-  const { error: errorVencidos } = await supabase
-    .from('matriculas')
-    .update({ estado: 'vencido' as const })
+  const { error: errorVencidos } = await (supabase
+    .from('matriculas') as any)
+    .update({ estado: 'vencido' })
     .lt('fecha_vencimiento', hoy)
-    .neq('estado', 'vencido' as const)
-    .neq('estado', 'congelado' as const)
-    .neq('estado', 'cancelado' as const);
+    .neq('estado', 'vencido')
+    .neq('estado', 'congelado')
+    .neq('estado', 'cancelado');
 
   if (errorVencidos) {
     console.error('Error al actualizar estados vencidos:', errorVencidos);
   }
 
   // Actualizar matrículas activas (que no estén vencidas)
-  const { error: errorActivos } = await supabase
-    .from('matriculas')
-    .update({ estado: 'activo' as const })
+  const { error: errorActivos } = await (supabase
+    .from('matriculas') as any)
+    .update({ estado: 'activo' })
     .gte('fecha_vencimiento', hoy)
-    .eq('estado', 'vencido' as const);
+    .eq('estado', 'vencido');
 
 
   if (errorActivos) {

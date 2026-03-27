@@ -60,8 +60,8 @@ export default function EditMemberModal({ isOpen, onClose, onSubmit, memberData 
 
   const loadPlanes = async () => {
     try {
-      const { data, error } = await supabase
-        .from('planes')
+      const { data, error } = await (supabase
+        .from('planes') as any)
         .select('*')
         .order('nombre');
 
