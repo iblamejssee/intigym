@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getDaysUntilExpiration, isExpiringSoon } from '@/lib/utils';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import RenewMemberModal, { RenewalFormData } from '@/components/RenewMemberModal';
 
 interface MemberDetail {
     id: string;
@@ -49,6 +50,7 @@ export default function MemberEliteProfile({ params }: { params: Promise<{ id: s
     const [loading, setLoading] = useState(true);
     const [member, setMember] = useState<MemberDetail | null>(null);
     const [activeTab, setActiveTab] = useState<'resumen' | 'historial' | 'asistencia' | 'progreso'>('resumen');
+    const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
 
     useEffect(() => {
         if (memberId) {
@@ -105,6 +107,52 @@ export default function MemberEliteProfile({ params }: { params: Promise<{ id: s
         }
     };
 
+    const handleRenewMember = async (formData: RenewalFormData) => {
+        if (!member) return;
+
+        try {
+            // 1. Crear nueva matrícula
+            const { data: newMatricula, error: matriculaError } = await (supabase
+                .from('matriculas') as any)
+                .insert([{
+                    cliente_id: member.id,
+                    plan_id: formData.planId,
+                    fecha_inicio: formData.fechaInicio,
+                    fecha_vencimiento: formData.fechaVencimiento,
+                    monto_total: formData.montoTotal,
+                    estado: 'activo'
+                }])
+                .select()
+                .single();
+
+            if (matriculaError) throw matriculaError;
+
+            // 2. Registrar pago
+            if (formData.montoPagado > 0 && newMatricula) {
+                const { error: pagoError } = await (supabase
+                    .from('pagos') as any)
+                    .insert([{
+                        matricula_id: newMatricula.id,
+                        monto_pagado: formData.montoPagado,
+                        metodo_pago: formData.metodoPago,
+                        fecha_pago: new Date().toISOString()
+                    }]);
+
+                if (pagoError) throw pagoError;
+            }
+
+            toast.success('¡Membresía renovada exitosamente!');
+            setIsRenewModalOpen(false);
+
+            // 3. Recargar datos del perfil
+            await loadMemberFullData();
+
+        } catch (error) {
+            console.error('Error al renovar:', error);
+            toast.error('Error al renovar membresía');
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex h-screen bg-[#0a0a0a] text-white">
@@ -152,7 +200,10 @@ export default function MemberEliteProfile({ params }: { params: Promise<{ id: s
                             nombre={`${member.nombres} ${member.apellidos}`}
                             fechaVencimiento={ultimaMatricula?.fecha_vencimiento || ''}
                         />
-                        <button className="px-6 py-2.5 bg-linear-to-r from-[#AB8745] to-[#D4A865] rounded-xl font-bold text-sm shadow-lg shadow-[#AB8745]/20 hover:scale-105 transition-all">
+                        <button
+                            onClick={() => setIsRenewModalOpen(true)}
+                            className="px-6 py-2.5 bg-linear-to-r from-[#AB8745] to-[#D4A865] rounded-xl font-bold text-sm shadow-lg shadow-[#AB8745]/20 hover:scale-105 transition-all"
+                        >
                             Renovar Membresía
                         </button>
                     </div>
@@ -293,8 +344,11 @@ export default function MemberEliteProfile({ params }: { params: Promise<{ id: s
                                     </div>
                                 </div>
                                 {isVencido && (
-                                    <button className="px-5 py-2 bg-red-600 hover:bg-red-700 rounded-xl text-xs font-black uppercase tracking-widest transition-colors mb-0">
-                                        Gestionar Mora
+                                    <button
+                                        onClick={() => setIsRenewModalOpen(true)}
+                                        className="px-5 py-2 bg-red-600 hover:bg-red-700 rounded-xl text-xs font-black uppercase tracking-widest transition-colors mb-0"
+                                    >
+                                        Renovar Ahora
                                     </button>
                                 )}
                             </div>
@@ -549,6 +603,22 @@ export default function MemberEliteProfile({ params }: { params: Promise<{ id: s
                     )}
                 </AnimatePresence>
             </main>
+
+            {/* Modal de Renovación */}
+            {member && (
+                <RenewMemberModal
+                    isOpen={isRenewModalOpen}
+                    onClose={() => setIsRenewModalOpen(false)}
+                    onSubmit={handleRenewMember}
+                    memberData={{
+                        id: member.id,
+                        nombre: `${member.nombres} ${member.apellidos}`,
+                        dni: member.dni,
+                        planActual: ultimaMatricula?.planes?.nombre || 'Sin Plan',
+                        fechaVencimiento: ultimaMatricula?.fecha_vencimiento || ''
+                    }}
+                />
+            )}
         </div>
     );
 }
